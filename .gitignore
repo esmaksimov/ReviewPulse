@@ -1,0 +1,34 @@
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# --- Environments ---------------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- Secrets & local config -------------------------------------------------
+# .env.example ships in the repo; any real .env must never be committed.
+.env
+.env.*
+!.env.example
+
+# --- Runtime data -----------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# --- Editors / OS ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,38 @@
+# Default: SQLite on a volume — one container, nothing else to run.
+#   docker compose up -d
+#
+# Postgres instead, if you already run one or want off-the-shelf backups:
+#   docker compose --profile postgres up -d
+# and in .env:
+#   DATABASE_URL=postgresql+asyncpg://reviewpulse:reviewpulse@db:5432/reviewpulse
+
+services:
+  bot:
+    image: s1k0de/reviewpulse:latest
+    # Swap `image` for `build: .` to run your own working copy.
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////app/data/reviewpulse.db}
+    volumes:
+      - reviewpulse-data:/app/data
+
+  db:
+    image: postgres:16-alpine
+    profiles: [postgres]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reviewpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reviewpulse}
+      POSTGRES_DB: ${POSTGRES_DB:-reviewpulse}
+    volumes:
+      - reviewpulse-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reviewpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  reviewpulse-data:
+  reviewpulse-pgdata:

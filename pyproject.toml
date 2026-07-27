@@ -1,0 +1,48 @@
+[project]
+name = "reviewpulse"
+version = "0.1.0"
+description = "Telegram bot that keeps code review moving: tracks who approved, who asked for changes, and nudges the ball holder in working hours."
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dynamic = ["dependencies"]
+
+[project.scripts]
+reviewpulse = "reviewpulse.__main__:main"
+
+[tool.poetry]
+packages = [{ include = "reviewpulse", from = "src" }]
+requires-poetry = ">=2.0"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+aiogram = "^3.13"
+apscheduler = "^3.10"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0" }
+aiosqlite = "^0.20"
+alembic = "^1.13"
+httpx = "^0.27"
+pydantic = "^2.7"
+pydantic-settings = "^2.3"
+asyncpg = "^0.29"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+pytest-asyncio = "^0.23"
+respx = "^0.21"
+ruff = "^0.5"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
