@@ -21,8 +21,9 @@ from ...db import repo
 from ...db.models import utcnow
 from ...domain.escalation import policy_from_settings
 from ...domain.workhours import calendar_from_settings
+from ...i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
 from ...services import reviews as review_service
-from .. import texts
+from .. import card, texts
 
 logger = logging.getLogger(__name__)
 
@@ -32,36 +33,49 @@ router.message.filter(F.chat.type == "private")
 _DURATION = re.compile(r"^\s*(\d+)\s*([hdчд])?\s*$", re.IGNORECASE)
 
 
+async def _locale_for(session: AsyncSession, message: Message, settings: Settings) -> str:
+    user_row = await repo.get_user_by_telegram_id(session, message.from_user.id)
+    return resolve_locale(
+        user_row.locale if user_row else None,
+        message.from_user.language_code,
+        default=settings.default_locale,
+    )
+
+
 @router.message(CommandStart())
-async def on_start(message: Message, session: AsyncSession) -> None:
+async def on_start(message: Message, session: AsyncSession, settings: Settings) -> None:
     user = message.from_user
-    await repo.upsert_user(session, user.id, user.username, user.full_name)
+    user_row = await repo.upsert_user(
+        session, user.id, user.username, user.full_name, user.language_code
+    )
+    locale = resolve_locale(user_row.locale, user.language_code, default=settings.default_locale)
 
     if not user.username:
-        await message.answer(texts.NO_USERNAME)
+        await message.answer(texts.t(locale, "no_username"))
         return
 
     linked = await review_service.link_user_to_assignments(session, user.id, user.username)
-    reply = texts.START
+    reply = texts.t(locale, "start_message")
     if linked:
-        reply += f"\n\nНашёл открытых ревью на тебе: {linked}. Посмотреть — /status"
+        reply += texts.t(locale, "start_found_open", count=linked)
     await message.answer(reply)
 
 
 @router.message(Command("status"))
 async def on_status(message: Message, session: AsyncSession, settings: Settings) -> None:
+    locale = await _locale_for(session, message, settings)
     assignments = await repo.assignments_for_user(session, message.from_user.id)
     if not assignments:
-        await message.answer(texts.NOTHING_PENDING)
+        await message.answer(texts.t(locale, "nothing_pending"))
         return
 
     policy = policy_from_settings(settings, calendar_from_settings(settings))
-    lines = ["<b>Ревью на тебе</b>", ""]
+    lines = [texts.t(locale, "status_header"), ""]
     for row in assignments:
-        headline = " — ".join(part for part in (row.review.product, row.review.title) if part)
         lines.append(
             texts.status_line(
-                headline or "Ревью",
+                locale,
+                card.headline(row.review, locale),
                 row.state,
                 policy.deadline_for(repo.to_domain(row)),
                 settings.timezone_offset_hours,
@@ -72,37 +86,69 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
 
 @router.message(Command("link"))
 async def on_link(
-    message: Message, command: CommandObject, session: AsyncSession
+    message: Message, command: CommandObject, session: AsyncSession, settings: Settings
 ) -> None:
     """Map this Telegram user to a GitLab login, so their threads can be attributed."""
+    locale = await _locale_for(session, message, settings)
     if not command.args:
-        await message.answer("Формат: <code>/link ivanov</code>")
+        await message.answer(texts.t(locale, "link_usage"))
         return
 
     user = await repo.upsert_user(
-        session, message.from_user.id, message.from_user.username, message.from_user.full_name
+        session,
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.full_name,
+        message.from_user.language_code,
     )
     user.gitlab_username = command.args.strip().lstrip("@")
-    await message.answer(f"Связал с GitLab: <code>{user.gitlab_username}</code>")
+    await message.answer(texts.t(locale, "link_done", login=user.gitlab_username))
+
+
+@router.message(Command("lang"))
+async def on_lang(
+    message: Message, command: CommandObject, session: AsyncSession, settings: Settings
+) -> None:
+    """Explicit language choice — takes priority over Telegram's own language_code."""
+    locale = await _locale_for(session, message, settings)
+    requested = normalize_locale(command.args) if command.args else None
+    if requested is None:
+        names = ", ".join(f"{code} ({texts.LANGUAGE_NAMES[code]})" for code in SUPPORTED_LOCALES)
+        await message.answer(texts.t(locale, "lang_usage", list=names))
+        return
+
+    user = await repo.upsert_user(
+        session,
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.full_name,
+        message.from_user.language_code,
+    )
+    user.locale = requested
+    await message.answer(texts.t(requested, "lang_done", name=texts.LANGUAGE_NAMES[requested]))
 
 
 @router.message(Command("mute"))
-async def on_mute(message: Message, command: CommandObject, session: AsyncSession) -> None:
+async def on_mute(
+    message: Message, command: CommandObject, session: AsyncSession, settings: Settings
+) -> None:
+    locale = await _locale_for(session, message, settings)
     duration = _parse_duration(command.args or "8h")
     if duration is None:
-        await message.answer("Формат: <code>/mute 2h</code> или <code>/mute 1d</code>")
+        await message.answer(texts.t(locale, "mute_usage"))
         return
 
     user = await repo.upsert_user(session, message.from_user.id, message.from_user.username)
     user.muted_until = utcnow() + duration
-    await message.answer(f"Молчу {texts.humanize(duration)}. Вернуть — /unmute")
+    await message.answer(texts.t(locale, "mute_done", duration=texts.humanize(locale, duration)))
 
 
 @router.message(Command("unmute"))
-async def on_unmute(message: Message, session: AsyncSession) -> None:
+async def on_unmute(message: Message, session: AsyncSession, settings: Settings) -> None:
+    locale = await _locale_for(session, message, settings)
     user = await repo.upsert_user(session, message.from_user.id, message.from_user.username)
     user.muted_until = None
-    await message.answer("Снова напоминаю.")
+    await message.answer(texts.t(locale, "unmute_done"))
 
 
 def _parse_duration(raw: str) -> timedelta | None:

@@ -43,7 +43,7 @@ async def sync_open_reviews(
     session: AsyncSession,
     client: GitLabClient,
     now: datetime | None = None,
-    required_approvals: int = 2,
+    approvals_cap: int = 2,
 ) -> list[SyncChange]:
     moment = now or utcnow()
     changes: list[SyncChange] = []
@@ -57,7 +57,7 @@ async def sync_open_reviews(
             logger.warning("gitlab sync skipped review %s", review.id, exc_info=True)
             continue
         changes.extend(
-            await _apply_snapshots(session, review, snapshots, moment, required_approvals)
+            await _apply_snapshots(session, review, snapshots, moment, approvals_cap)
         )
 
     await session.flush()
@@ -92,7 +92,7 @@ async def _apply_snapshots(
     review: Review,
     snapshots: list[MergeRequestSnapshot],
     moment: datetime,
-    required_approvals: int,
+    approvals_cap: int,
 ) -> list[SyncChange]:
     changes: list[SyncChange] = []
 
@@ -109,7 +109,7 @@ async def _apply_snapshots(
             continue
 
         result = await apply_verdict(
-            session, assignment, event, moment, required_approvals=required_approvals
+            session, assignment, event, moment, approvals_cap=approvals_cap
         )
         if result.changed:
             logger.info(

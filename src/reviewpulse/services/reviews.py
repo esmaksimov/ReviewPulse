@@ -127,7 +127,7 @@ async def apply_verdict(
     assignment: ReviewerAssignment,
     event: Event,
     at: datetime | None = None,
-    required_approvals: int = 2,
+    approvals_cap: int = 2,
 ) -> VerdictResult:
     """Run one event through the state machine and persist the outcome.
 
@@ -150,7 +150,7 @@ async def apply_verdict(
     assignment.decided_at = moment
 
     review = assignment.review
-    closed = await _close_if_enough_approvals(session, review, moment, required_approvals)
+    closed = await _close_if_enough_approvals(session, review, moment, approvals_cap)
     await session.flush()
     return VerdictResult(assignment=assignment, changed=True, review_closed=closed)
 
@@ -179,13 +179,23 @@ async def mark_fixes_done(
     return moved
 
 
+def approvals_needed(review: Review, cap: int) -> int:
+    """How many 👍 this specific review needs to close.
+
+    List one reviewer and their approval alone is enough — waiting for a second
+    verdict that was never coming just leaves the review stuck. List two (or more)
+    and it takes that many, up to `cap` (default 2): naming a long list of reviewers
+    doesn't gate the review on unanimous approval, it just needs the team's usual quorum.
+    """
+    return max(1, min(len(review.assignments), cap))
+
+
 async def _close_if_enough_approvals(
-    session: AsyncSession, review: Review, at: datetime, required_approvals: int
+    session: AsyncSession, review: Review, at: datetime, approvals_cap: int
 ) -> bool:
-    """Team rule: two 👍 close the MR."""
     if review.is_closed:
         return False
-    if review.approvals < required_approvals:
+    if review.approvals < approvals_needed(review, approvals_cap):
         return False
     review.is_closed = True
     review.closed_at = at

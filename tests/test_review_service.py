@@ -106,6 +106,38 @@ async def test_two_approvals_close_the_review(session) -> None:
     assert review.is_closed
 
 
+async def test_a_single_named_reviewer_alone_closes_the_review(session) -> None:
+    """Name one reviewer and their approval is enough — don't wait on a second
+    verdict that was never coming."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+
+    assignment = await repo.find_assignment(session, review.id, 101)
+    result = await review_service.apply_verdict(session, assignment, Event.APPROVE)
+
+    assert result.review_closed
+    assert review.is_closed
+
+
+async def test_the_cap_limits_approvals_needed_for_a_long_reviewer_list(session) -> None:
+    """Name three reviewers with the default cap of 2 and only two approvals close
+    it — naming a long list doesn't turn into a unanimous-approval requirement."""
+    text = POST.replace("Ревью: @user1 @user2", "Ревью: @user1 @user2 @user3")
+    review = await make_review(session, text=text)
+    for username, uid in (("user1", 101), ("user2", 102), ("user3", 103)):
+        await link(session, username, uid)
+
+    assert review_service.approvals_needed(review, cap=2) == 2
+
+    first = await repo.find_assignment(session, review.id, 101)
+    result = await review_service.apply_verdict(session, first, Event.APPROVE, approvals_cap=2)
+    assert not result.review_closed
+
+    second = await repo.find_assignment(session, review.id, 102)
+    result = await review_service.apply_verdict(session, second, Event.APPROVE, approvals_cap=2)
+    assert result.review_closed, "the third reviewer's verdict was never required"
+
+
 async def test_pressing_the_same_button_twice_is_a_no_op(session) -> None:
     review = await make_review(session)
     await link(session, "user1", 101)

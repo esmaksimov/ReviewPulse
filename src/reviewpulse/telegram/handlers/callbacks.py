@@ -18,6 +18,7 @@ from ...db import repo
 from ...db.models import ReviewerAssignment, utcnow
 from ...domain.state import Event, ReviewerState
 from ...domain.workhours import calendar_from_settings
+from ...i18n import resolve_locale
 from ...services import nudges as nudge_service
 from ...services import reviews as review_service
 from .. import card, texts
@@ -27,26 +28,26 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="callbacks")
 
-_ANSWERS = {
-    "approve": "👍 Апрув засчитан",
-    "changes": "✍️ Отмечено: нужны правки",
-    "fixed": "Ревьюверы уведомлены, что правки готовы",
-}
-
 
 @router.callback_query(ReviewAction.filter())
 async def on_review_action(
-    query: CallbackQuery, callback_data: ReviewAction, session: AsyncSession,
-    bot: Bot, settings: Settings,
+    query: CallbackQuery,
+    callback_data: ReviewAction,
+    session: AsyncSession,
+    bot: Bot,
+    settings: Settings,
 ) -> None:
     user = query.from_user
-    await repo.upsert_user(session, user.id, user.username, user.full_name)
+    user_row = await repo.upsert_user(
+        session, user.id, user.username, user.full_name, user.language_code
+    )
     if user.username:
         await review_service.link_user_to_assignments(session, user.id, user.username)
+    locale = resolve_locale(user_row.locale, user.language_code, default=settings.default_locale)
 
     review = await repo.get_review(session, callback_data.review_id)
     if review is None:
-        await query.answer(texts.REVIEW_GONE, show_alert=True)
+        await query.answer(texts.t(locale, "review_gone"), show_alert=True)
         return
 
     handler = {
@@ -57,52 +58,56 @@ async def on_review_action(
         "claim": _claim,
     }[callback_data.action]
 
-    answer = await handler(session, review, user, settings)
-    await card.refresh(bot, review, settings.required_approvals)
+    answer = await handler(session, review, user, settings, locale)
+    await card.refresh(bot, review, settings.required_approvals, settings.default_locale)
     await query.answer(answer, show_alert=False)
 
 
-async def _approve(session: AsyncSession, review, user, settings: Settings) -> str:
-    return await _verdict(session, review, user, Event.APPROVE, settings)
+async def _approve(session: AsyncSession, review, user, settings: Settings, locale: str) -> str:
+    return await _verdict(session, review, user, Event.APPROVE, settings, locale)
 
 
-async def _request_changes(session: AsyncSession, review, user, settings: Settings) -> str:
-    return await _verdict(session, review, user, Event.REQUEST_CHANGES, settings)
+async def _request_changes(
+    session: AsyncSession, review, user, settings: Settings, locale: str
+) -> str:
+    return await _verdict(session, review, user, Event.REQUEST_CHANGES, settings, locale)
 
 
-async def _verdict(session: AsyncSession, review, user, event: Event, settings: Settings) -> str:
+async def _verdict(
+    session: AsyncSession, review, user, event: Event, settings: Settings, locale: str
+) -> str:
     assignment = await repo.find_assignment(session, review.id, user.id)
     if assignment is None:
-        return texts.NOT_A_REVIEWER
+        return texts.t(locale, "not_a_reviewer")
 
     result = await review_service.apply_verdict(
-        session, assignment, event, required_approvals=settings.required_approvals
+        session, assignment, event, approvals_cap=settings.required_approvals
     )
     if not result.changed:
-        return f"Уже {texts.STATE_LABEL[assignment.state]}"
+        return texts.t(locale, "answer_already", state=texts.state_label(locale, assignment.state))
     if result.review_closed:
-        return "👍 Апрув засчитан, ревью закрыто"
-    return _ANSWERS["approve" if event is Event.APPROVE else "changes"]
+        return texts.t(locale, "answer_closed_by_approval")
+    return texts.t(locale, "answer_approved" if event is Event.APPROVE else "answer_changes")
 
 
-async def _fixes_done(session: AsyncSession, review, user, settings: Settings) -> str:
+async def _fixes_done(session: AsyncSession, review, user, settings: Settings, locale: str) -> str:
     """The author reports the comments are addressed — hand the ball back."""
     moved = await review_service.mark_fixes_done(session, review)
     if not moved:
-        return "Никто сейчас не ждёт правок по этому ревью"
-    return _ANSWERS["fixed"]
+        return texts.t(locale, "answer_nothing_to_fix")
+    return texts.t(locale, "answer_fixed")
 
 
-async def _close(session: AsyncSession, review, user, settings: Settings) -> str:
+async def _close(session: AsyncSession, review, user, settings: Settings, locale: str) -> str:
     closed = await review_service.close_review(session, review)
-    return "Ревью закрыто" if closed else "Ревью уже закрыто"
+    return texts.t(locale, "answer_review_closed" if closed else "answer_already_closed")
 
 
-async def _claim(session: AsyncSession, review, user, settings: Settings) -> str:
+async def _claim(session: AsyncSession, review, user, settings: Settings, locale: str) -> str:
     """Fallback when the post's reviewer line could not be parsed."""
     existing = await repo.find_assignment(session, review.id, user.id)
     if existing is not None:
-        return "Ты уже ревьювер этого ревью"
+        return texts.t(locale, "answer_already_reviewer")
 
     review.assignments.append(
         ReviewerAssignment(
@@ -115,27 +120,33 @@ async def _claim(session: AsyncSession, review, user, settings: Settings) -> str
         )
     )
     await session.flush()
-    return "Теперь ты ревьювер этого ревью"
+    return texts.t(locale, "answer_now_reviewer")
 
 
 @router.callback_query(SnoozeAction.filter())
 async def on_snooze(
     query: CallbackQuery, callback_data: SnoozeAction, session: AsyncSession, settings: Settings
 ) -> None:
+    user = query.from_user
+    user_row = await repo.upsert_user(
+        session, user.id, user.username, user.full_name, user.language_code
+    )
+    locale = resolve_locale(user_row.locale, user.language_code, default=settings.default_locale)
+
     assignment = await session.get(ReviewerAssignment, callback_data.assignment_id)
-    if assignment is None or assignment.telegram_user_id != query.from_user.id:
-        await query.answer(texts.REVIEW_GONE, show_alert=True)
+    if assignment is None or assignment.telegram_user_id != user.id:
+        await query.answer(texts.t(locale, "review_gone"), show_alert=True)
         return
 
     now = utcnow()
     if callback_data.hours:
         until = now + timedelta(hours=callback_data.hours)
-        label = f"Не побеспокою {callback_data.hours} ч"
+        label = texts.t(locale, "snoozed_hour")
     else:
         # "Until tomorrow" is the next work-window opening, not a flat 24 hours —
         # over a weekend that means Monday morning.
         until = calendar_from_settings(settings).next_window_start_after(now)
-        label = "Не побеспокою до завтра"
+        label = texts.t(locale, "snoozed_tomorrow")
 
     await nudge_service.snooze(session, assignment, until)
     await query.answer(label, show_alert=False)

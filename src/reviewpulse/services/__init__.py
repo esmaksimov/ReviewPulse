@@ -3,6 +3,7 @@ from .nudges import NudgeSender, run_nudge_tick, snooze
 from .reviews import (
     VerdictResult,
     apply_verdict,
+    approvals_needed,
     close_review,
     create_or_update_review,
     link_user_to_assignments,
@@ -15,6 +16,7 @@ __all__ = [
     "SyncChange",
     "VerdictResult",
     "apply_verdict",
+    "approvals_needed",
     "close_review",
     "create_or_update_review",
     "link_user_to_assignments",

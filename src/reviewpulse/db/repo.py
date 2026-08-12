@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..domain.state import NUDGEABLE, Assignment, ReviewerState
+from ..i18n import normalize_locale
 from .models import MergeRequestLink, NudgeLog, Review, ReviewerAssignment, User
 
 # --- users ------------------------------------------------------------------
@@ -33,11 +34,16 @@ async def upsert_user(
     telegram_user_id: int,
     username: str | None = None,
     full_name: str | None = None,
+    language_code: str | None = None,
 ) -> User:
-    """Record (or refresh) a user we can DM. Called from /start and every button press."""
+    """Record (or refresh) a user we can DM. Called from /start and every button press.
+
+    `language_code` seeds `User.locale` from Telegram's own client-language guess, but
+    only on first contact — it must never overwrite a locale the user chose with /lang.
+    """
     user = await get_user_by_telegram_id(session, telegram_user_id)
     if user is None:
-        user = User(telegram_user_id=telegram_user_id)
+        user = User(telegram_user_id=telegram_user_id, locale=normalize_locale(language_code))
         session.add(user)
     if username is not None:
         user.username = username

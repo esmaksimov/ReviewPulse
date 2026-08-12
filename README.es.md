@@ -1,0 +1,445 @@
+# ReviewPulse
+
+[English](README.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Italiano](README.it.md) · [中文](README.zh.md)
+
+Un bot de Telegram que evita que las revisiones de código se estanquen: sigue el
+estado de cada revisor asignado y le escribe por privado a quien tenga el turno —
+estrictamente en horario laboral.
+
+Detecta dos situaciones:
+
+1. Un revisor nunca reaccionó, y el MR simplemente queda ahí parado.
+2. Un revisor pidió cambios, el autor corrigió todo y cerró los hilos, pero el revisor
+   nunca volvió a aprobar. El turno es suyo, pero nadie se lo recuerda.
+
+Si el revisor vuelve a pedir cambios **después** de que las correcciones llegaron, el
+turno vuelve al autor y los recordatorios se detienen — el bot nunca insiste con
+alguien que ya hizo su parte.
+
+---
+
+## Inicio rápido
+
+Imagen lista para usar: [`s1k0de/reviewpulse`](https://hub.docker.com/r/s1k0de/reviewpulse)
+(linux/amd64 + linux/arm64). No hay nada que compilar.
+
+**1. Crea un bot** con [@BotFather](https://t.me/BotFather) y copia el token. Ya que
+estás ahí: `/setprivacy` → **Disable** — de lo contrario el bot nunca ve la
+publicación que Telegram copia automáticamente al grupo de discusión.
+
+**2. Agrega el bot** como administrador del canal de revisión **y** como miembro de su
+grupo de discusión vinculado (los comentarios deben estar habilitados).
+
+**3. Ejecútalo** — elige lo que mejor se ajuste a tu forma de desplegar:
+
+<table>
+<tr><th>docker run</th><th>docker compose</th></tr>
+<tr valign="top"><td>
+
+```bash
+docker run -d --name reviewpulse \
+  --restart unless-stopped \
+  -e BOT_TOKEN='TU_TOKEN' \
+  -e TIMEZONE_OFFSET_HOURS=3 \
+  -e WORK_START=09:00 -e WORK_END=18:00 \
+  -v reviewpulse-data:/app/data \
+  s1k0de/reviewpulse:latest
+```
+
+</td><td>
+
+```bash
+curl -O https://raw.githubusercontent.com/\
+esmaksimov/ReviewPulse/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/\
+esmaksimov/ReviewPulse/main/.env.example
+# completa BOT_TOKEN en .env
+docker compose up -d
+```
+
+</td></tr>
+</table>
+
+Vale la pena quedarse con compose — es lo que editarás cuando vuelvas a cambiar algún
+ajuste, y `--profile postgres` está a un flag de distancia si alguna vez lo necesitas
+(ver [Qué base de datos usar](#qué-base-de-datos-usar) más abajo).
+
+Todo lo demás tiene un valor por defecto razonable: SLA de 2 horas, un recordatorio
+cada 20 minutos, máximo 8 avisos al día, una revisión se cierra cuando aprueba cada
+revisor nombrado. Lista completa en [`.env.example`](.env.example).
+
+**4. Cada revisor le escribe `/start` al bot una vez.** Telegram prohíbe que un bot
+escriba primero — sin esto, los recordatorios simplemente no pueden llegar. Si un
+revisor asignado todavía no lo hizo, el bot lo dice una vez en el hilo de comentarios.
+
+### Qué base de datos usar
+
+**Usa SQLite** — es la opción por defecto y es suficiente. El bot es de un solo
+proceso y escribe unas pocas decenas de filas al día; toda la base de datos es un
+archivo en un volumen, y respaldarla es un `cp`.
+
+Postgres vale la pena solo si ya tienes uno corriendo, o quieres respaldos listos:
+
+```bash
+docker compose --profile postgres up -d
+```
+y en `.env`:
+```dotenv
+DATABASE_URL=postgresql+asyncpg://reviewpulse:reviewpulse@db:5432/reviewpulse
+```
+
+Mismo esquema, mismas migraciones, ambos motores probados de punta a punta. Las
+migraciones se aplican solas al iniciar.
+
+---
+
+## Cómo se ve
+
+El bot lee las publicaciones por su forma, no por una plantilla rígida — los dos
+ejemplos de abajo funcionan igual. Necesita exactamente una cosa: **al menos un enlace
+a un MR**; sin uno, la publicación se trata como un anuncio y no se rastrea.
+
+> El análisis de la publicación busca las etiquetas de este formato concreto
+> ("Ревью:", "MR:", ...) — esa parte todavía no es multilingüe, sigue el formato en
+> que escribe *tu* equipo. Los propios mensajes del bot (botones, privados, la
+> tarjeta) sí lo son — ver [Idiomas](#idiomas).
+
+Una publicación en el canal:
+
+```
+Pagos
+
+Mejora del connection pool
+
+MR SC: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
+
+MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
+
+Tarea: https://tasks.example.com/space/2829/boards/card/3517380
+
+Ревью: @user1 @user2
+```
+
+Una plantilla más estricta también se analiza sin problema:
+
+```
+Catálogo
+Arreglar la redirección de pago
+
+MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
+
+Документация: https://wiki.example.com/pages/12345
+Описание: si falta la documentación
+Ревьювер: @user2 para backend / @user1 para el resto, @user3
+```
+
+Qué extrae el bot de la publicación:
+
+| Campo | Origen |
+|---|---|
+| producto | primera línea no vacía |
+| título de la tarea | siguiente línea que no sea una etiqueta ni un enlace suelto |
+| MRs | **todos** los enlaces con forma `…/-/merge_requests/<N>`, sean los que sean |
+| revisores | cada `@usuario` en la línea "Ревью…"; si no existe, cada `@usuario` de la publicación |
+
+Los enlaces al gestor de tareas o a la wiki nunca se confunden con un MR. El texto
+mezclado en la línea de revisores no oculta los usuarios. Si no se pudo identificar a
+ningún revisor, el bot no se queda callado: la tarjeta trae un botón "🙋 Soy revisor".
+
+La tarjeta que aparece en el hilo de comentarios bajo la publicación:
+
+```
+🤖 Pagos — Mejora del connection pool
+
+   Aprobaciones: 1/2
+
+   • @user1 — 👍 aprobado
+   • @user2 — 🔁 cambios listos, esperando una nueva revisión
+
+   api_controller!1112
+   utils!223
+
+   [👍 Aprobar]              [✍️ Solicitar cambios]
+   [✅ Corregido]            [🗄 Cerrar]
+```
+
+Y a quien tenga el turno le llega un mensaje privado:
+
+```
+🔁 Los cambios están listos, pero ✍️ sigue puesto
+
+El autor corrigió todo lo que pediste, pero aún no diste tu aprobación.
+
+Pagos — Mejora del connection pool
+Retraso: 1 h 20 min de tiempo laboral
+
+https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
+
+Abrir discusión
+
+   [🔕 1 h]  [🔕 Mañana]
+```
+
+---
+
+## Por qué botones, y no reacciones
+
+**Las reacciones en un canal de Telegram son anónimas.** Un bot administrador solo
+recibe `message_reaction_count` (el agregado "👍 2"), nunca `message_reaction` con un
+campo `user` — las reacciones por usuario solo existen en grupos y supergrupos. No hay
+forma de que un bot, ni un userbot vía MTProto, sepa *quién específicamente* reaccionó
+a una publicación de un canal; Telegram simplemente no entrega ese dato.
+Ver [Bot API](https://core.telegram.org/bots/api#update) y
+[api/reactions](https://core.telegram.org/api/reactions).
+
+Por eso el bot publica **su propia tarjeta con botones en línea** en el hilo de
+comentarios. Un `callback_query` siempre trae `from.id`, así que el estado de cada
+revisor es 100% confiable. El canal en sí y el formato de las publicaciones no
+cambian.
+
+Cómo funciona:
+
+```
+publicación en el canal
+     │
+     │  Telegram la copia automáticamente al grupo de discusión vinculado
+     ▼
+copia en el grupo  ──►  el bot le responde con  ──►  la tarjeta queda dentro
+                        una tarjeta + botones         del hilo de comentarios
+                            │
+                            │  pulsar un botón = callback_query,
+                            ▼  que siempre trae from.id
+                     estado confiable por revisor
+```
+
+Las dos actualizaciones — la publicación del canal y su copia en el grupo — llegan en
+un orden impredecible, así que ambos caminos hacen upsert contra la misma clave, y la
+que llega segunda es la que efectivamente publica la tarjeta.
+
+---
+
+## Modelo de estados
+
+El estado vive en el par **(revisión × revisor)**, no en la revisión — un revisor
+puede haber aprobado ya mientras otro todavía tiene el turno.
+
+| Estado | Significado | Turno de | ¿Se avisa? |
+|---|---|---|---|
+| `PENDING` | sin veredicto todavía | revisor | sí, tras el SLA |
+| `CHANGES_REQUESTED` | ✍️, correcciones pendientes | autor | no |
+| `AWAITING_RECHECK` | correcciones listas, ✍️ sigue puesto | revisor | sí, tras el SLA |
+| `APPROVED` | 👍 | — | no |
+
+```
+PENDING           --[👍]-------------------> APPROVED
+PENDING           --[✍️]-------------------> CHANGES_REQUESTED
+CHANGES_REQUESTED --[correcciones marcadas]-> AWAITING_RECHECK
+AWAITING_RECHECK  --[👍]-------------------> APPROVED
+AWAITING_RECHECK  --[✍️]-------------------> CHANGES_REQUESTED   ← "pidió más"
+APPROVED          --[✍️]-------------------> CHANGES_REQUESTED   ← deshacer un clic accidental
+```
+
+El penúltimo salto es "el revisor miró las correcciones y pidió más": el turno vuelve
+al autor, los avisos se detienen, el reloj del SLA se reinicia.
+
+Implementación — [`domain/state.py`](src/reviewpulse/domain/state.py), un módulo puro
+sin E/S.
+
+### Cuántas aprobaciones necesita una revisión
+
+`REQUIRED_APPROVALS` (2 por defecto) es un **techo**, no un objetivo fijo. El número
+real necesario se ajusta a cuántos revisores fueron nombrados de verdad:
+
+- si se nombra a un revisor → su aprobación sola cierra la revisión — nada queda
+  esperando un segundo veredicto que nunca iba a llegar;
+- si se nombra a dos → ambos deben aprobar;
+- si se nombra a más que el techo → de todas formas solo hacen falta
+  `REQUIRED_APPROVALS`, una lista larga de revisores no se convierte en un requisito
+  de aprobación unánime.
+
+Implementación — [`services/reviews.py:approvals_needed`](src/reviewpulse/services/reviews.py).
+
+---
+
+## Horario laboral
+
+Tanto el SLA (2h) como el intervalo de repetición (20min) avanzan **solo dentro del
+horario laboral** — 09:00–18:00 UTC+3, de lunes a viernes por defecto. Una publicación
+a las 17:30 del viernes tiene su plazo a las 10:30 del lunes. Las noches y los fines de
+semana no cuentan.
+
+Aritmética — [`domain/workhours.py`](src/reviewpulse/domain/workhours.py). Los días
+festivos todavía no se tienen en cuenta; `is_working_day` es el punto de extensión.
+
+**Antispam:** como máximo `MAX_NUDGES_PER_DAY` (8) recordatorios al día por par,
+botones "🔕 1h" / "🔕 Mañana" en cada mensaje privado, y el comando `/mute 2h`. Un
+usuario que bloqueó al bot queda excluido de la consulta directamente, en vez de
+reintentarse cada minuto.
+
+---
+
+## Cómo sabe el bot que las correcciones están listas
+
+**Modo A (por defecto).** El autor pulsa "✅ Corregido" en la tarjeta — todos los
+revisores que aún tienen ✍️ pasan a `AWAITING_RECHECK`.
+
+**Modo B (`GITLAB_ENABLED=true` + un token).** El bot consulta GitLab por su cuenta y
+lee los hilos:
+
+- todos los hilos resolubles que abrió el revisor están resueltos, en **todos** los
+  MRs de la revisión → "las correcciones están listas";
+- aparece un hilo nuevo sin resolver de su parte → "pidió más", los avisos se
+  detienen.
+
+Esa segunda regla es una forma independiente de los botones de detectar que el
+revisor volvió: aunque solo haya dejado un comentario en GitLab y nunca haya tocado
+la tarjeta, el bot se queda en silencio.
+
+Un revisor vincula su usuario de GitLab con `/link <usuario>`. Sin ese vínculo, se usa
+en su lugar la bandera `blocking_discussions_resolved` de todo el MR — más gruesa,
+pero mejor que nada. La sincronización nunca toca a los revisores que ya aprobaron,
+para que un hilo reabierto por otra persona no revoque un 👍 en silencio.
+
+---
+
+## Idiomas
+
+Soportados: ruso, inglés, español, italiano, chino (`ru`, `en`, `es`, `it`, `zh`).
+
+Dos cosas distintas necesitan un idioma, y no comparten uno:
+
+- **La tarjeta compartida y el aviso de "escríbeme /start"** viven en el hilo de
+  comentarios — todos los que lo ven, ven el mismo mensaje, así que tienen un único
+  idioma: `DEFAULT_LOCALE` (por defecto `en`).
+- **Los mensajes privados** — recordatorios, `/start`, `/status`, confirmaciones de
+  botones — siguen el idioma propio de cada revisor: lo que haya elegido con `/lang`,
+  si no el idioma del cliente de Telegram, si no `DEFAULT_LOCALE`.
+
+```bash
+/lang es   # cambia tus propios mensajes privados a español
+/lang      # lista los idiomas disponibles
+```
+
+Las tablas de traducción viven en
+[`telegram/texts.py`](src/reviewpulse/telegram/texts.py); la resolución del idioma en
+[`i18n.py`](src/reviewpulse/i18n.py). Una prueba verifica que los cinco idiomas tengan
+exactamente el mismo conjunto de claves, así que un texto agregado a un idioma y
+olvidado en otro rompe el CI en vez de caer en silencio al inglés en producción.
+
+---
+
+## Comandos del bot
+
+| Comando | Qué hace |
+|---|---|
+| `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
+| `/status` | qué tienes pendiente ahora mismo, con plazos |
+| `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
+| `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
+| `/mute 2h`, `/unmute` | silenciar / volver a avisar |
+
+---
+
+## CI/CD
+
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) ejecuta
+pruebas y linting en cada push y pull request, y — al hacer push de una etiqueta o a
+`main` — construye una imagen multi-arquitectura y la publica en Docker Hub:
+
+- un push de etiqueta con forma `v*` (p. ej. `v1.1`) → publica `<etiqueta>` y
+  actualiza `latest`;
+- un push a `main` → publica `edge`, una compilación rodante para probar entre
+  lanzamientos, que nunca se confunde con un lanzamiento estable.
+
+Para apuntarlo a tu propia cuenta de Docker Hub, agrega dos secretos de repositorio en
+**Settings → Secrets and variables → Actions**:
+
+| Secreto | Valor |
+|---|---|
+| `DOCKERHUB_USERNAME` | tu usuario de Docker Hub |
+| `DOCKERHUB_TOKEN` | un token de acceso de [hub.docker.com/settings/security](https://hub.docker.com/settings/security) — **no** tu contraseña. Con permisos de lectura y escritura alcanza. |
+
+Después, lanza una versión de la forma habitual:
+
+```bash
+git tag v1.1
+git push origin v1.1
+```
+
+---
+
+## Desarrollo
+
+```bash
+poetry env use 3.12
+poetry install
+cp .env.example .env                # completa BOT_TOKEN
+poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
+
+poetry run pytest                   # 122 pruebas
+poetry run ruff check src tests
+```
+
+Cubre lo importante: la aritmética del horario laboral (viernes 17:30 → lunes 10:30),
+cada arista de la máquina de estados, incluyendo "pidió más", la regla dinámica de
+aprobaciones necesarias, el analizador de publicaciones contra una publicación real y
+contra la plantilla estricta, el análisis de hilos de GitLab contra fixtures, la
+completitud de las tablas de traducción en los cinco idiomas, y un ciclo completo sobre
+una base de datos SQLite real que sobrevive a un reinicio.
+
+Compila y publica tu propia imagen:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t TU_CUENTA/reviewpulse:latest --push .
+```
+
+**Prueba manual de extremo a extremo.** Crea un canal de prueba con un grupo de
+discusión vinculado, haz al bot administrador de ambos, y acelera el tiempo en `.env`:
+
+```dotenv
+SLA_MINUTES=1
+RECHECK_SLA_MINUTES=1
+NUDGE_INTERVAL_MINUTES=1
+WORK_START=00:00
+WORK_END=23:59
+WORK_DAYS=0,1,2,3,4,5,6
+```
+
+Así el ciclo completo — aviso → ✍️ → "Corregido" → aviso de revisión → ✍️ otra vez →
+silencio → 👍×2 → cierre — se completa en unos minutos.
+
+---
+
+## Estructura
+
+```
+src/reviewpulse/
+  config.py              configuración desde el entorno
+  i18n.py                 lista de idiomas y su resolución (privado vs. mensaje compartido)
+  domain/                 lógica pura: máquina de estados, horario laboral, reglas de escalado
+  parsing/                 análisis de publicaciones y extracción de enlaces a MR
+  gitlab/                  cliente REST y análisis de hilos
+  db/                      modelos, sesión, consultas
+  services/                pegamento entre dominio y BD: revisiones, avisos, sincronización con GitLab
+  telegram/                 bot, handlers, tarjeta, textos traducidos
+  scheduler/                el tick de avisos y el tick de sincronización
+migrations/                Alembic
+```
+
+---
+
+## Limitaciones conocidas
+
+- **No se verifica quién pulsó "✅ Corregido".** Una publicación de canal es anónima
+  — Telegram no reporta un autor — así que el botón está disponible para cualquiera
+  en el hilo.
+- **El bot no puede ver las reacciones en la publicación misma** (ver arriba); la
+  tarjeta es la fuente de verdad.
+- **La publicación del canal no se borra al cerrar** — el bot solo cambia su tarjeta
+  a "✅ Cerrado". Borrar la publicación de otra persona rompe el historial del hilo.
+- **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
+  como un día laboral normal.
+- **El análisis de publicaciones reconoce un único conjunto de etiquetas**
+  ("Ревью:", "MR:", "Задача:", ...) — todavía no es multilingüe, solo lo son los
+  propios mensajes del bot.

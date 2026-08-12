@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     recheck_sla_minutes: int = Field(default=120, alias="RECHECK_SLA_MINUTES")
     nudge_interval_minutes: int = Field(default=20, alias="NUDGE_INTERVAL_MINUTES")
     max_nudges_per_day: int = Field(default=8, alias="MAX_NUDGES_PER_DAY")
+    #: Ceiling on how many 👍 a review needs. The actual requirement scales down to the
+    #: number of reviewers named in the post — list one and their approval is enough,
+    #: list two and both must sign off — this only caps it for longer reviewer lists.
     required_approvals: int = Field(default=2, alias="REQUIRED_APPROVALS")
 
     # --- GitLab (feature-flagged; off until a token is issued) --------------
@@ -54,9 +57,27 @@ class Settings(BaseSettings):
     gitlab_poll_minutes: int = Field(default=5, alias="GITLAB_POLL_MINUTES")
     gitlab_timeout_seconds: float = Field(default=10.0, alias="GITLAB_TIMEOUT_SECONDS")
 
+    # --- Language -------------------------------------------------------------
+    # Locale for messages with no single owner: the shared tracker card and the
+    # registration hint. DMs use each reviewer's own locale instead — see
+    # telegram/i18n.py — so this does not have to match everyone's language.
+    default_locale: str = Field(default="en", alias="DEFAULT_LOCALE")
+
     # --- Storage ------------------------------------------------------------
     database_url: str = Field(default="sqlite+aiosqlite:///./reviewpulse.db", alias="DATABASE_URL")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    @field_validator("default_locale")
+    @classmethod
+    def _validate_locale(cls, value: str) -> str:
+        from .i18n import SUPPORTED_LOCALES
+
+        normalized = value.strip().lower()
+        if normalized not in SUPPORTED_LOCALES:
+            raise ValueError(
+                f"DEFAULT_LOCALE must be one of {', '.join(SUPPORTED_LOCALES)}, got {value!r}"
+            )
+        return normalized
 
     @field_validator("work_start", "work_end", mode="before")
     @classmethod

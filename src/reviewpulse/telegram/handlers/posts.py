@@ -48,8 +48,8 @@ async def on_channel_post(
         posted_at=message.date,
         author_label=message.author_signature,
     )
-    await card.publish(bot, session, review, settings.required_approvals)
-    await _warn_unreachable_reviewers(bot, session, review)
+    await card.publish(bot, session, review, settings.required_approvals, settings.default_locale)
+    await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
 
 
 @router.message(F.is_automatic_forward, F.forward_origin)
@@ -80,15 +80,18 @@ async def on_discussion_copy(
     review.discussion_message_id = message.message_id
     await session.flush()
 
-    await card.publish(bot, session, review, settings.required_approvals)
-    await _warn_unreachable_reviewers(bot, session, review)
+    await card.publish(bot, session, review, settings.required_approvals, settings.default_locale)
+    await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
 
 
-async def _warn_unreachable_reviewers(bot: Bot, session: AsyncSession, review) -> None:
+async def _warn_unreachable_reviewers(
+    bot: Bot, session: AsyncSession, review, locale: str
+) -> None:
     """A reviewer we have no telegram id for cannot be DMed at all.
 
     Silently doing nothing would look exactly like a working bot, so say it once, in
-    the thread, and remember that we did.
+    the thread, and remember that we did. Posted in the shared thread, so it follows
+    the deployment's default locale rather than any one reviewer's.
     """
     unreachable = [
         row
@@ -102,7 +105,9 @@ async def _warn_unreachable_reviewers(bot: Bot, session: AsyncSession, review) -
     try:
         await bot.send_message(
             chat_id=review.discussion_chat_id,
-            text=texts.registration_hint([row.display_label for row in unreachable], me.username),
+            text=texts.registration_hint(
+                locale, [row.display_label for row in unreachable], me.username
+            ),
             reply_to_message_id=review.discussion_message_id,
             disable_web_page_preview=True,
         )

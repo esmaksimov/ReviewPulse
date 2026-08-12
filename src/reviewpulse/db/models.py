@@ -88,6 +88,9 @@ class User(Base, TimestampMixin):
     username: Mapped[str | None] = mapped_column(String(64), index=True)
     full_name: Mapped[str | None] = mapped_column(String(256))
     gitlab_username: Mapped[str | None] = mapped_column(String(128), index=True)
+    #: One of i18n.SUPPORTED_LOCALES, or NULL to fall back to DEFAULT_LOCALE. Set from
+    #: Telegram's language_code on first contact; overridable with /lang.
+    locale: Mapped[str | None] = mapped_column(String(8))
     #: False once the bot learns it cannot DM this user (blocked / never started).
     can_be_dmed: Mapped[bool] = mapped_column(Boolean, default=True)
     muted_until: Mapped[datetime | None] = mapped_column(UtcDateTime())
@@ -122,7 +125,8 @@ class Review(Base, TimestampMixin):
 
     posted_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
-    #: True once REQUIRED_APPROVALS is reached or someone closes it by hand.
+    #: True once enough reviewers approved (see `services.reviews.approvals_needed`)
+    #: or someone closes it by hand.
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     assignments: Mapped[list[ReviewerAssignment]] = relationship(

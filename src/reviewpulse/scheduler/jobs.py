@@ -24,7 +24,9 @@ async def nudge_tick(bot: Bot, database: Database, settings: Settings) -> None:
     policy = policy_from_settings(settings, calendar_from_settings(settings))
     async with database.session() as session:
         sent = await nudges.run_nudge_tick(
-            session, policy, TelegramNudgeSender(bot=bot, session=session)
+            session,
+            policy,
+            TelegramNudgeSender(bot=bot, session=session, default_locale=settings.default_locale),
         )
     if sent:
         logger.info("sent %s reminders", len(sent))
@@ -40,13 +42,15 @@ async def gitlab_tick(bot: Bot, database: Database, settings: Settings) -> None:
         timeout=settings.gitlab_timeout_seconds,
     ) as client, database.session() as session:
         changes = await gitlab_sync.sync_open_reviews(
-            session, client, required_approvals=settings.required_approvals
+            session, client, approvals_cap=settings.required_approvals
         )
         # Refresh each affected card once, not once per assignment.
         for review_id in {change.assignment.review_id for change in changes}:
             review = await repo.get_review(session, review_id)
             if review is not None:
-                await card.refresh(bot, review, settings.required_approvals)
+                await card.refresh(
+                    bot, review, settings.required_approvals, settings.default_locale
+                )
 
     if changes:
         logger.info("gitlab sync applied %s state changes", len(changes))

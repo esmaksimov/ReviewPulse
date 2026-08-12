@@ -23,7 +23,9 @@ class SnoozeAction(CallbackData, prefix="sn"):
     hours: int  # 0 means "until tomorrow morning"
 
 
-def review_card(review_id: int, *, is_closed: bool, needs_reviewers: bool) -> InlineKeyboardMarkup:
+def review_card(
+    review_id: int, locale: str, *, is_closed: bool, needs_reviewers: bool
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     if is_closed:
@@ -31,42 +33,42 @@ def review_card(review_id: int, *, is_closed: bool, needs_reviewers: bool) -> In
 
     if needs_reviewers:
         builder.button(
-            text="🙋 Я ревьювер",
+            text=texts.t(locale, "btn_claim"),
             callback_data=ReviewAction(review_id=review_id, action="claim"),
         )
         return builder.as_markup()
 
     builder.button(
-        text=texts.BTN_APPROVE,
+        text=texts.t(locale, "btn_approve"),
         callback_data=ReviewAction(review_id=review_id, action="approve"),
     )
     builder.button(
-        text=texts.BTN_REQUEST_CHANGES,
+        text=texts.t(locale, "btn_request_changes"),
         callback_data=ReviewAction(review_id=review_id, action="changes"),
     )
     builder.button(
-        text=texts.BTN_FIXED,
+        text=texts.t(locale, "btn_fixed"),
         callback_data=ReviewAction(review_id=review_id, action="fixed"),
     )
     builder.button(
-        text=texts.BTN_CLOSE,
+        text=texts.t(locale, "btn_close"),
         callback_data=ReviewAction(review_id=review_id, action="close"),
     )
     builder.adjust(2, 2)
     return builder.as_markup()
 
 
-def nudge_actions(assignment_id: int, review_url: str | None) -> InlineKeyboardMarkup:
+def nudge_actions(locale: str, assignment_id: int, review_url: str | None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if review_url:
-        builder.row(InlineKeyboardButton(text=texts.BTN_OPEN_REVIEW, url=review_url))
+        builder.row(InlineKeyboardButton(text=texts.t(locale, "btn_open_review"), url=review_url))
     builder.row(
         InlineKeyboardButton(
-            text=texts.BTN_SNOOZE_HOUR,
+            text=texts.t(locale, "btn_snooze_hour"),
             callback_data=SnoozeAction(assignment_id=assignment_id, hours=1).pack(),
         ),
         InlineKeyboardButton(
-            text=texts.BTN_SNOOZE_TOMORROW,
+            text=texts.t(locale, "btn_snooze_tomorrow"),
             callback_data=SnoozeAction(assignment_id=assignment_id, hours=0).pack(),
         ),
     )
