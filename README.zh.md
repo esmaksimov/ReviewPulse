@@ -83,7 +83,7 @@ DATABASE_URL=postgresql+asyncpg://reviewpulse:reviewpulse@db:5432/reviewpulse
 
 机器人是按帖子的结构来解析的，而不是死板的模板——下面两种写法都能识别。它只要求一件事：**至少包含一个 MR 链接**；没有链接的帖子会被当作普通公告，不会被跟踪。
 
-> 帖子解析目前查找的是这种特定格式的标签（"Ревью:"、"MR:" 等）——这部分暂时还不支持多语言，它是按照*你的*团队写帖子的方式设计的。机器人自身发出的消息（按钮、私信、卡片）则是多语言的——见[语言支持](#语言支持)。
+> 标签（"评审:"、"MR:"、"文档:" 等）在机器人所支持的每一种语言里都能被识别——无论团队用俄语、英语还是中文写帖子，解析结果都是一样的。见[语言支持](#语言支持)。
 
 频道中的一条帖子：
 
@@ -98,7 +98,7 @@ MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
 任务: https://tasks.example.com/space/2829/boards/card/3517380
 
-Ревью: @user1 @user2
+评审: @user1 @user2
 ```
 
 更严格的模板也能正确解析：
@@ -109,9 +109,9 @@ MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
 MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
 
-Документация: https://wiki.example.com/pages/12345
-Описание: 如果缺少文档
-Ревьювер: @user2 负责后端 / @user1 负责其余部分，@user3
+文档: https://wiki.example.com/pages/12345
+描述: 如果缺少文档
+评审人: @user2 负责后端 / @user1 负责其余部分，@user3
 ```
 
 机器人从帖子中提取的内容：
@@ -121,7 +121,7 @@ MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
 | 产品名 | 第一行非空内容 |
 | 任务标题 | 之后第一行不是标签也不是纯链接的内容 |
 | MR | 所有形如 `…/-/merge_requests/<N>` 的链接，**全部**提取，不管有多少个 |
-| 评审人 | "Ревью…" 那一行里的所有 `@用户名`；如果没有这一行，则取帖子中所有的 `@用户名` |
+| 评审人 | "评审…" 那一行里的所有 `@用户名`；如果没有这一行，则取帖子中所有的 `@用户名` |
 
 任务系统或 wiki 的链接不会被误判为 MR。评审人那一行里夹杂的其他文字也不会掩盖用户名。如果无法识别出评审人，机器人不会保持沉默：卡片会带上一个"🙋 我是评审人"的按钮。
 
@@ -297,32 +297,6 @@ UTC+3 的 09:00–18:00，周一到周五。周五 17:30 发的帖子，截止�
 
 ---
 
-## CI/CD
-
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)
-会在每次 push 和 pull request 时运行测试和 lint，并在推送标签或推送到 `main`
-分支时构建多架构镜像并发布到 Docker Hub：
-
-- 推送形如 `v*` 的标签（例如 `v1.1`）→ 发布该 `<标签>` 并更新 `latest`；
-- 推送到 `main` → 发布 `edge`，一个用于在两次发布之间测试的滚动构建版本，绝不会被误认为稳定版本。
-
-要让它推送到你自己的 Docker Hub 账号，请在
-**Settings → Secrets and variables → Actions** 中添加两个仓库密钥：
-
-| 密钥 | 值 |
-|---|---|
-| `DOCKERHUB_USERNAME` | 你的 Docker Hub 用户名 |
-| `DOCKERHUB_TOKEN` | 在 [hub.docker.com/settings/security](https://hub.docker.com/settings/security) 生成的访问令牌——**不是**你的密码。拥有读写权限即可。 |
-
-之后按常规方式发布一个版本：
-
-```bash
-git tag v1.1
-git push origin v1.1
-```
-
----
-
 ## 开发
 
 ```bash
@@ -389,4 +363,4 @@ migrations/                Alembic 迁移
 - **关闭后频道里的帖子不会被删除**——机器人只会把自己的卡片状态改为"✅
   已关闭"。删除别人发的帖子会破坏讨论串的历史记录。
 - **不考虑法定节假日**——机器人会把国家法定假日当作普通工作日处理。
-- **帖子解析目前只认识一套标签**（"Ревью:"、"MR:"、"Задача:" 等）——目前只有机器人自身的消息支持多语言，帖子解析暂不支持。
+- **帖子解析针对每个字段只认识一组固定的标签词**（见[效果展示](#效果展示)）——不在这个列表里的标签，无论是什么语言，都会退化为按位置猜测，而不是被直接读取。

@@ -99,10 +99,9 @@ El bot lee las publicaciones por su forma, no por una plantilla rígida — los 
 ejemplos de abajo funcionan igual. Necesita exactamente una cosa: **al menos un enlace
 a un MR**; sin uno, la publicación se trata como un anuncio y no se rastrea.
 
-> El análisis de la publicación busca las etiquetas de este formato concreto
-> ("Ревью:", "MR:", ...) — esa parte todavía no es multilingüe, sigue el formato en
-> que escribe *tu* equipo. Los propios mensajes del bot (botones, privados, la
-> tarjeta) sí lo son — ver [Idiomas](#idiomas).
+> Las etiquetas ("Revisión:", "MR:", "Documentación:", ...) se reconocen en cualquier
+> idioma que hable el propio bot — un equipo que escribe en ruso o chino obtiene el
+> mismo análisis que uno que escribe en español. Ver [Idiomas](#idiomas).
 
 Una publicación en el canal:
 
@@ -117,7 +116,7 @@ MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
 Tarea: https://tasks.example.com/space/2829/boards/card/3517380
 
-Ревью: @user1 @user2
+Revisión: @user1 @user2
 ```
 
 Una plantilla más estricta también se analiza sin problema:
@@ -128,9 +127,9 @@ Arreglar la redirección de pago
 
 MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
 
-Документация: https://wiki.example.com/pages/12345
-Описание: si falta la documentación
-Ревьювер: @user2 para backend / @user1 para el resto, @user3
+Documentación: https://wiki.example.com/pages/12345
+Descripción: si falta la documentación
+Revisor: @user2 para backend / @user1 para el resto, @user3
 ```
 
 Qué extrae el bot de la publicación:
@@ -140,7 +139,7 @@ Qué extrae el bot de la publicación:
 | producto | primera línea no vacía |
 | título de la tarea | siguiente línea que no sea una etiqueta ni un enlace suelto |
 | MRs | **todos** los enlaces con forma `…/-/merge_requests/<N>`, sean los que sean |
-| revisores | cada `@usuario` en la línea "Ревью…"; si no existe, cada `@usuario` de la publicación |
+| revisores | cada `@usuario` en la línea "Revisión…"; si no existe, cada `@usuario` de la publicación |
 
 Los enlaces al gestor de tareas o a la wiki nunca se confunden con un MR. El texto
 mezclado en la línea de revisores no oculta los usuarios. Si no se pudo identificar a
@@ -340,34 +339,6 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 
 ---
 
-## CI/CD
-
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) ejecuta
-pruebas y linting en cada push y pull request, y — al hacer push de una etiqueta o a
-`main` — construye una imagen multi-arquitectura y la publica en Docker Hub:
-
-- un push de etiqueta con forma `v*` (p. ej. `v1.1`) → publica `<etiqueta>` y
-  actualiza `latest`;
-- un push a `main` → publica `edge`, una compilación rodante para probar entre
-  lanzamientos, que nunca se confunde con un lanzamiento estable.
-
-Para apuntarlo a tu propia cuenta de Docker Hub, agrega dos secretos de repositorio en
-**Settings → Secrets and variables → Actions**:
-
-| Secreto | Valor |
-|---|---|
-| `DOCKERHUB_USERNAME` | tu usuario de Docker Hub |
-| `DOCKERHUB_TOKEN` | un token de acceso de [hub.docker.com/settings/security](https://hub.docker.com/settings/security) — **no** tu contraseña. Con permisos de lectura y escritura alcanza. |
-
-Después, lanza una versión de la forma habitual:
-
-```bash
-git tag v1.1
-git push origin v1.1
-```
-
----
-
 ## Desarrollo
 
 ```bash
@@ -440,6 +411,6 @@ migrations/                Alembic
   a "✅ Cerrado". Borrar la publicación de otra persona rompe el historial del hilo.
 - **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
   como un día laboral normal.
-- **El análisis de publicaciones reconoce un único conjunto de etiquetas**
-  ("Ревью:", "MR:", "Задача:", ...) — todavía no es multilingüe, solo lo son los
-  propios mensajes del bot.
+- **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por
+  campo (ver [Cómo se ve](#cómo-se-ve)) — una etiqueta fuera de esa lista, en
+  cualquier idioma, cae en la heurística posicional en vez de leerse directamente.

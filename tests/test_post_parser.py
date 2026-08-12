@@ -136,6 +136,59 @@ def test_text_mentions_supply_the_user_id_for_handleless_reviewers() -> None:
     assert post.reviewers[0].key == "id:555"
 
 
+def test_english_labels_are_recognized() -> None:
+    post = parse_post(
+        "Payments\nConnection pool rework\n\n"
+        "MR: https://git.example.com/backend/api/-/merge_requests/1112\n\n"
+        "Docs: https://wiki.example.com/pages/1\n\n"
+        "Task: https://tasks.example.com/card/1\n\n"
+        "Review: @user1 @user2"
+    )
+    assert post.title == "Connection pool rework"
+    assert post.docs_url == "https://wiki.example.com/pages/1"
+    assert post.task_url == "https://tasks.example.com/card/1"
+    assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
+
+
+def test_spanish_labels_are_recognized() -> None:
+    post = parse_post(
+        "Pagos\nMejora del connection pool\n\n"
+        "MR: https://git.example.com/backend/api/-/merge_requests/1112\n\n"
+        "Documentación: https://wiki.example.com/pages/1\n"
+        "Descripción: si falta la documentación\n\n"
+        "Revisión: @user1 @user2"
+    )
+    assert post.title == "Mejora del connection pool"
+    assert post.docs_url == "https://wiki.example.com/pages/1"
+    assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
+
+
+def test_italian_labels_are_recognized() -> None:
+    post = parse_post(
+        "Pagamenti\nMiglioramento del connection pool\n\n"
+        "MR: https://git.example.com/backend/api/-/merge_requests/1112\n\n"
+        "Documentazione: https://wiki.example.com/pages/1\n"
+        "Descrizione: se manca la documentazione\n\n"
+        "Revisori: @user1 @user2"
+    )
+    assert post.title == "Miglioramento del connection pool"
+    assert post.docs_url == "https://wiki.example.com/pages/1"
+    assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
+
+
+def test_chinese_labels_are_recognized() -> None:
+    """Chinese posts commonly use a fullwidth colon (：) after the label."""
+    post = parse_post(
+        "支付\n连接池优化\n\n"
+        "MR：https://git.example.com/backend/api/-/merge_requests/1112\n\n"
+        "文档：https://wiki.example.com/pages/1\n\n"
+        "评审：@user1 @user2"
+    )
+    assert post.title == "连接池优化"
+    assert post.docs_url == "https://wiki.example.com/pages/1"
+    assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
+
+
 def test_a_handle_and_its_text_mention_are_merged_into_one_reviewer() -> None:
     @dataclass
     class FakeUser:

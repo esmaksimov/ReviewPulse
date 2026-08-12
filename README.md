@@ -98,10 +98,9 @@ The bot reads posts by shape, not by a rigid template — both examples below wo
 needs exactly one thing: **at least one merge-request link**; without one, a post is
 treated as an announcement and never tracked.
 
-> Post parsing looks for the labels this specific format uses ("Ревью:", "MR:", ...) —
-> that part is not (yet) multi-language, since it matches how *your* team writes posts.
-> The bot's own messages (buttons, DMs, the card) are — see
-> [Language support](#language-support).
+> Label words ("Review:", "MR:", "Docs:", ...) are recognized in every language the
+> bot itself speaks — a team posting in Spanish or Chinese gets the same parsing a
+> Russian- or English-speaking team does. See [Language support](#language-support).
 
 A post in the channel:
 
@@ -116,7 +115,7 @@ MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
 Task: https://tasks.example.com/space/2829/boards/card/3517380
 
-Ревью: @user1 @user2
+Review: @user1 @user2
 ```
 
 A stricter template also parses fine:
@@ -127,9 +126,9 @@ Fix the payment redirect
 
 MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
 
-Документация: https://wiki.example.com/pages/12345
-Описание: if documentation is missing
-Ревьювер: @user2 for backend / @user1 for everything else, @user3
+Docs: https://wiki.example.com/pages/12345
+Description: if documentation is missing
+Reviewer: @user2 for backend / @user1 for everything else, @user3
 ```
 
 What the bot pulls out of a post:
@@ -139,7 +138,7 @@ What the bot pulls out of a post:
 | product | first non-empty line |
 | task title | next line that isn't a label or a bare link |
 | MRs | **every** link shaped like `…/-/merge_requests/<N>`, however many there are |
-| reviewers | every `@handle` on the "Ревью…" line; otherwise every `@handle` in the post |
+| reviewers | every `@handle` on the "Review…" line; otherwise every `@handle` in the post |
 
 Tracker and wiki links are never mistaken for MRs. Prose mixed into the reviewer line
 doesn't hide the handles. If no reviewers could be identified, the bot doesn't stay
@@ -333,33 +332,6 @@ production.
 
 ---
 
-## CI/CD
-
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) runs
-tests and lint on every push and pull request, and — on a tag push or a push to
-`main` — builds a multi-arch image and publishes it to Docker Hub:
-
-- a tag push matching `v*` (e.g. `v1.1`) → publishes `<tag>` and updates `latest`;
-- a push to `main` → publishes `edge`, a rolling build to test against between
-  releases, never mistaken for a stable release.
-
-To point it at your own Docker Hub account, add two repository secrets under
-**Settings → Secrets and variables → Actions**:
-
-| Secret | Value |
-|---|---|
-| `DOCKERHUB_USERNAME` | your Docker Hub username |
-| `DOCKERHUB_TOKEN` | an access token from [hub.docker.com/settings/security](https://hub.docker.com/settings/security) — **not** your password. Read & Write scope is enough. |
-
-Then cut a release the usual way:
-
-```bash
-git tag v1.1
-git push origin v1.1
-```
-
----
-
 ## Development
 
 ```bash
@@ -431,5 +403,6 @@ migrations/              Alembic
   "✅ Closed". Deleting someone else's post breaks the thread's history.
 - **Public holidays aren't accounted for** — the bot will treat a national holiday as
   a normal working day.
-- **Post parsing recognizes one set of labels** ("Ревью:", "MR:", "Задача:", ...) —
-  it isn't multi-language yet, only the bot's own messages are.
+- **Post parsing recognizes a fixed set of label words** per field (see
+  [What it looks like](#what-it-looks-like)) — a label outside that list, in any
+  language, falls back to positional heuristics rather than being read directly.

@@ -5,6 +5,12 @@ The pinned template and what people actually post have drifted apart — real po
 and split the MR line into "MR SC:" / "MR Utils:". So this parser goes by shape rather
 than by the template: labelled lines where they exist, positional fallbacks otherwise.
 
+Label words are matched in every language the bot itself speaks (see `i18n.py`) —
+"Ревью:", "Review:", "Revisor:", "Revisori:" and "评审:" are all recognized as the
+reviewer line, so a team writing posts in Spanish or Chinese gets the same parsing a
+Russian-speaking team does. Only the *labels* are multilingual; free text (the
+product name, the task title) is read as-is regardless of language.
+
 It never raises on malformed input. A post it cannot fully understand still produces a
 ParsedPost — with `reviewers` empty, which the caller surfaces in the card instead of
 silently nudging nobody.
@@ -22,14 +28,21 @@ from .gitlab_url import MergeRequestRef, find_merge_requests
 #: out of e-mails and URLs.
 _USERNAME = re.compile(r"(?<![\w@/.])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 
-_REVIEWER_LABEL = re.compile(r"^\s*(ревью\w*|reviewers?)\s*[:\-]", re.IGNORECASE)
-_TASK_LABEL = re.compile(r"^\s*(задача|таска|task|карточка)\s*[:\-]", re.IGNORECASE)
-_DOCS_LABEL = re.compile(r"^\s*(документация|docs?)\s*[:\-]", re.IGNORECASE)
+# One alternation per label, ru | en | es | it | zh. Italian largely reuses English
+# tech vocabulary ("task", "review") on the ground, so its own words are added
+# alongside rather than instead of the English ones.
+_REVIEWER_WORDS = r"ревью\w*|reviewers?|revisor(?:es)?|revisión|revisor[ei]|评审人?"
+_TASK_WORDS = r"задача|таска|карточка|tasks?|tarea|attività|任务"
+_DOCS_WORDS = r"документация|docs?|documentation|documentaci[oó]n|documentazione|文档"
+_DESCRIPTION_WORDS = r"описание|descriptions?|descripci[oó]n|descrizione|描述"
+
+_REVIEWER_LABEL = re.compile(rf"^\s*(?:{_REVIEWER_WORDS})\s*[:\-：]", re.IGNORECASE)
+_TASK_LABEL = re.compile(rf"^\s*(?:{_TASK_WORDS})\s*[:\-：]", re.IGNORECASE)
+_DOCS_LABEL = re.compile(rf"^\s*(?:{_DOCS_WORDS})\s*[:\-：]", re.IGNORECASE)
 
 #: Lines that are metadata, never the story/task title.
 _ANY_LABEL = re.compile(
-    r"^\s*(mr\b|мр\b|ревью|reviewer|задача|таска|task|карточка|документация|docs?|описание|"
-    r"description)",
+    rf"^\s*(mr\b|мр\b|{_REVIEWER_WORDS}|{_TASK_WORDS}|{_DOCS_WORDS}|{_DESCRIPTION_WORDS})",
     re.IGNORECASE,
 )
 
@@ -76,11 +89,6 @@ class ParsedPost(BaseModel):
         """Only posts carrying at least one MR link are tracked as reviews."""
         return bool(self.merge_requests)
 
-    @property
-    def headline(self) -> str:
-        parts = [part for part in (self.product, self.title) if part]
-        return " — ".join(parts) if parts else "Ревью"
-
 
 def parse_post(text: str, entities: list | None = None) -> ParsedPost:
     """`entities` are aiogram MessageEntity objects; only `text_mention` is consulted."""
@@ -114,10 +122,10 @@ def _find_title(meaningful: list[str]) -> str | None:
 
 
 def _find_reviewers(lines: list[str]) -> list[ReviewerMention]:
-    """Usernames from the "Ревью:" line; the whole post is the fallback.
+    """Usernames from the reviewer-labelled line; the whole post is the fallback.
 
-    Teams put prose on that line ("@user1 для бэка / @user2 для остальных"), so we
-    take every handle on it rather than trying to parse the sentence.
+    Teams put prose on that line ("@user1 for backend / @user2 for everything else"),
+    so we take every handle on it rather than trying to parse the sentence.
     """
     for index, line in enumerate(lines):
         if not _REVIEWER_LABEL.match(line):

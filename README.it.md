@@ -102,10 +102,10 @@ Il bot legge i post in base alla loro forma, non a un template rigido — entram
 esempi qui sotto funzionano. Serve esattamente una cosa: **almeno un link a una MR**;
 senza, il post viene trattato come un annuncio e non viene tracciato.
 
-> L'analisi del post cerca le etichette di questo formato specifico ("Ревью:", "MR:",
-> ...) — questa parte non è (ancora) multilingua, segue il modo in cui *il tuo* team
-> scrive i post. I messaggi del bot stesso (pulsanti, privati, la card) invece lo
-> sono — vedi [Lingue supportate](#lingue-supportate).
+> Le etichette ("Revisori:", "MR:", "Documentazione:", ...) sono riconosciute in
+> qualunque lingua parli il bot stesso — un team che scrive in russo o cinese ottiene
+> la stessa analisi di uno che scrive in italiano. Vedi
+> [Lingue supportate](#lingue-supportate).
 
 Un post nel canale:
 
@@ -120,7 +120,7 @@ MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
 Task: https://tasks.example.com/space/2829/boards/card/3517380
 
-Ревью: @user1 @user2
+Revisori: @user1 @user2
 ```
 
 Anche un template più rigido viene analizzato correttamente:
@@ -131,9 +131,9 @@ Correggere il redirect di pagamento
 
 MR: https://gitlab.example.com/backend/services/checkout/-/merge_requests/77
 
-Документация: https://wiki.example.com/pages/12345
-Описание: se manca la documentazione
-Ревьювер: @user2 per il backend / @user1 per il resto, @user3
+Documentazione: https://wiki.example.com/pages/12345
+Descrizione: se manca la documentazione
+Revisore: @user2 per il backend / @user1 per il resto, @user3
 ```
 
 Cosa estrae il bot dal post:
@@ -143,7 +143,7 @@ Cosa estrae il bot dal post:
 | prodotto | prima riga non vuota |
 | titolo del task | riga successiva che non sia un'etichetta o un link nudo |
 | MR | **tutti** i link con forma `…/-/merge_requests/<N>`, quanti siano |
-| revisori | ogni `@utente` sulla riga "Ревью…"; altrimenti ogni `@utente` nel post |
+| revisori | ogni `@utente` sulla riga "Revisori…"; altrimenti ogni `@utente` nel post |
 
 I link al task tracker o alla wiki non vengono mai scambiati per una MR. Del testo
 mescolato nella riga dei revisori non nasconde gli username. Se non è stato possibile
@@ -347,33 +347,6 @@ silenzio sull'inglese in produzione.
 
 ---
 
-## CI/CD
-
-[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) esegue
-test e lint a ogni push e pull request, e — su un push di tag o su `main` — costruisce
-un'immagine multi-architettura e la pubblica su Docker Hub:
-
-- un push di tag con forma `v*` (es. `v1.1`) → pubblica `<tag>` e aggiorna `latest`;
-- un push su `main` → pubblica `edge`, una build rolling da usare per i test tra un
-  rilascio e l'altro, mai scambiabile per un rilascio stabile.
-
-Per puntarlo al tuo account Docker Hub, aggiungi due secret del repository in
-**Settings → Secrets and variables → Actions**:
-
-| Secret | Valore |
-|---|---|
-| `DOCKERHUB_USERNAME` | il tuo username Docker Hub |
-| `DOCKERHUB_TOKEN` | un access token da [hub.docker.com/settings/security](https://hub.docker.com/settings/security) — **non** la password. Bastano i permessi di lettura e scrittura. |
-
-Poi si rilascia una versione nel modo consueto:
-
-```bash
-git tag v1.1
-git push origin v1.1
-```
-
----
-
 ## Sviluppo
 
 ```bash
@@ -448,5 +421,7 @@ migrations/                Alembic
   cronologia del thread.
 - **I giorni festivi non sono gestiti** — il bot tratterà una festività nazionale
   come un normale giorno lavorativo.
-- **L'analisi dei post riconosce un unico insieme di etichette** ("Ревью:", "MR:",
-  "Задача:", ...) — per ora è multilingua solo il bot stesso, non l'analisi dei post.
+- **L'analisi dei post riconosce un insieme fisso di parole-etichetta** per campo
+  (vedi [Come si presenta](#come-si-presenta)) — un'etichetta fuori da quell'elenco,
+  in qualsiasi lingua, ricade sull'euristica posizionale invece di essere letta
+  direttamente.
