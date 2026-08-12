@@ -2,6 +2,8 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Italiano](README.it.md) · [中文](README.zh.md)
 
+<img width="1774" height="887" alt="code-review-reminder-bot-under-1mb" src="https://github.com/user-attachments/assets/b53f8d62-a9d3-4937-8f22-f3b1c486958f" />
+
 A Telegram bot that keeps code review from stalling: it tracks status per assigned
 reviewer and DMs whoever the ball is currently on — strictly during working hours.
 
