@@ -49,6 +49,7 @@ async def create_or_update_review(
     one — so this must be safe to call repeatedly.
     """
     review = await repo.get_review_by_channel_message(session, channel_chat_id, channel_message_id)
+    is_new = review is None
     if review is None:
         # The collections are passed explicitly so they count as loaded: touching an
         # unloaded collection on a freshly flushed row would emit a lazy load, which
@@ -75,6 +76,15 @@ async def create_or_update_review(
     _sync_merge_requests(review, post)
     await _sync_assignments(session, review, post, posted_at)
     await session.flush()
+
+    if is_new:
+        logger.info(
+            "tracking new review %s: %s reviewer(s), %s MR(s), channel_message_id=%s",
+            review.id,
+            len(review.assignments),
+            len(review.merge_requests),
+            channel_message_id,
+        )
     return review
 
 

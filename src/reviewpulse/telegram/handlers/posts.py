@@ -13,8 +13,20 @@ second is the one that actually posts it.
 
 Both are also handled on *edit*, not just on first arrival: a post that didn't parse
 as a review yet (missing a label the parser didn't know, say) can be turned into one
-retroactively just by editing it in the channel — no restart or manual command needed,
-as long as the bot is already running the code that understands the new label.
+retroactively just by editing it in the channel.
+
+That covers the channel side reliably (`edited_channel_post` always fires), but the
+Bot API gives no way to ask "what is the discussion-group copy of channel message N"
+— that mapping is learned only by *receiving* the copy as an update, and there is no
+guarantee Telegram re-delivers an already-existing copy as `edited_message` when its
+source is edited. So for a post whose copy predates a parser fix, editing the channel
+post alone may create the Review row but never learn the copy's message id, leaving
+the card unpublished with no visible sign anything happened.
+
+The reliable recovery path is a **reply**: replying to the copy in the discussion
+group — with anything — is a brand-new `message` update that always arrives, and
+`reply_to_message` hands us the copy's full contents, including its message id. So a
+plain reply re-anchors the review exactly as if the copy had just arrived fresh.
 """
 
 from __future__ import annotations
@@ -42,6 +54,11 @@ async def on_channel_post(
 ) -> None:
     post = parse_post(message.text or "", message.entities)
     if not post.looks_like_review:
+        logger.debug(
+            "channel post %s in %s skipped: no MR link and no labelled reviewer line",
+            message.message_id,
+            message.chat.id,
+        )
         return  # announcements and chatter carry no MR link
 
     review = await review_service.create_or_update_review(
@@ -63,15 +80,38 @@ async def on_discussion_copy(
     message: Message, session: AsyncSession, bot: Bot, settings: Settings
 ) -> None:
     """The auto-forwarded copy: this is the anchor the card replies to."""
-    origin = message.forward_origin
+    await _track_discussion_copy(message, session, bot, settings)
+
+
+@router.message(F.reply_to_message.is_automatic_forward, F.reply_to_message.forward_origin)
+async def on_reply_to_discussion_copy(
+    message: Message, session: AsyncSession, bot: Bot, settings: Settings
+) -> None:
+    """Manual recovery path: a reply to the copy re-anchors it even if the bot never
+    saw a direct update for that specific copy (see the module docstring). Fires on
+    every such reply regardless of what it says — re-processing an already-tracked
+    review is a no-op, so there is nothing to gate behind a specific command.
+    """
+    await _track_discussion_copy(message.reply_to_message, session, bot, settings)
+
+
+async def _track_discussion_copy(
+    copy: Message, session: AsyncSession, bot: Bot, settings: Settings
+) -> None:
+    origin = copy.forward_origin
     channel_chat_id = getattr(getattr(origin, "chat", None), "id", None)
     channel_message_id = getattr(origin, "message_id", None)
     if channel_chat_id is None or channel_message_id is None:
         return
 
-    text = message.text or message.caption or ""
-    post = parse_post(text, message.entities or message.caption_entities)
+    text = copy.text or copy.caption or ""
+    post = parse_post(text, copy.entities or copy.caption_entities)
     if not post.looks_like_review:
+        logger.debug(
+            "discussion copy %s in %s skipped: no MR link and no labelled reviewer line",
+            copy.message_id,
+            copy.chat.id,
+        )
         return
 
     review = await review_service.create_or_update_review(
@@ -80,10 +120,10 @@ async def on_discussion_copy(
         channel_message_id=channel_message_id,
         post=post,
         raw_text=text,
-        posted_at=message.date,
+        posted_at=copy.date,
     )
-    review.discussion_chat_id = message.chat.id
-    review.discussion_message_id = message.message_id
+    review.discussion_chat_id = copy.chat.id
+    review.discussion_message_id = copy.message_id
     await session.flush()
 
     await card.publish(bot, session, review, settings.required_approvals, settings.default_locale)

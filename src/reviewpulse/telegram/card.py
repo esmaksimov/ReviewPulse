@@ -62,6 +62,9 @@ async def publish(
     what places the card inside the thread rather than loose in the group.
     """
     if review.discussion_chat_id is None or review.discussion_message_id is None:
+        logger.info(
+            "review %s has no discussion-thread link yet, card not published", review.id
+        )
         return
 
     text, markup = render(review, approvals_cap, locale)
