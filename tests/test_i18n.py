@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from reviewpulse.i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
@@ -71,3 +73,26 @@ def test_state_labels_cover_every_reviewer_state() -> None:
     for locale in SUPPORTED_LOCALES:
         for state in ReviewerState:
             assert texts.state_label(locale, state)
+
+
+def test_status_line_links_the_headline_when_a_url_is_given() -> None:
+    from datetime import datetime
+
+    from reviewpulse.domain.state import ReviewerState
+
+    deadline = datetime(2026, 8, 13, 10, 20, tzinfo=UTC)
+    line = texts.status_line(
+        "en", "Payments", ReviewerState.PENDING, deadline, 3, "https://t.me/c/123/456"
+    )
+    assert '<a href="https://t.me/c/123/456">Payments</a>' in line
+
+
+def test_status_line_without_a_url_still_shows_the_headline() -> None:
+    from datetime import datetime
+
+    from reviewpulse.domain.state import ReviewerState
+
+    deadline = datetime(2026, 8, 13, 10, 20, tzinfo=UTC)
+    line = texts.status_line("en", "Payments", ReviewerState.PENDING, deadline, 3)
+    assert "Payments" in line
+    assert "<a href" not in line

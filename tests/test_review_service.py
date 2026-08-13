@@ -76,6 +76,25 @@ async def test_reprocessing_the_same_post_is_idempotent(session) -> None:
     assert len(second.merge_requests) == 2
 
 
+async def test_an_mr_less_review_with_labelled_reviewers_is_still_tracked(session) -> None:
+    """A real post: an infra/docs-only change with no code MR, only a wiki link and
+    an explicit "Ревьюверы:" line. The full create-and-nudge path must still work."""
+    text = (
+        "Продукт\n\nВынос телефона в отдельное хранилище\n\n"
+        "Дока: https://wiki.example.com/pages/1\n\n"
+        "Ревьюверы: @user1 @user2"
+    )
+    review = await make_review(session, text=text)
+
+    assert review.merge_requests == []
+    assert [row.username for row in review.assignments] == ["user1", "user2"]
+
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    result = await review_service.apply_verdict(session, assignment, Event.APPROVE)
+    assert not result.review_closed, "the second reviewer still hasn't approved"
+
+
 async def test_editing_a_post_preserves_verdicts_already_given(session) -> None:
     review = await make_review(session)
     await link(session, "user1", 101)

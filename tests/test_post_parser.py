@@ -84,6 +84,35 @@ def test_post_without_a_merge_request_is_not_a_review() -> None:
     assert not post.looks_like_review
 
 
+def test_a_labelled_reviewer_line_makes_a_post_a_review_even_without_an_mr() -> None:
+    """A real post from the channel: an infra/docs-only change with no code MR at
+    all, tracked by wiki link and a "Дока:" (colloquial short for "Документация")
+    label. It still names reviewers deliberately, so it must be tracked."""
+    post = parse_post(
+        "Продукт\n\n"
+        "Вынос телефона в отдельное хранилище\n\n"
+        "Дока: https://wiki.example.com/spaces/TEAM/pages/2037240524/API\n\n"
+        "Ревьюверы: @user1, @user2"
+    )
+
+    assert post.docs_url == "https://wiki.example.com/spaces/TEAM/pages/2037240524/API"
+    assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
+    assert post.merge_requests == []
+    assert post.has_labelled_reviewers
+    assert post.looks_like_review
+
+
+def test_stray_handle_without_a_reviewer_label_is_still_not_a_review() -> None:
+    """Chatter that happens to @-mention someone, with no MR and no explicit
+    reviewer line, must not be picked up just because a fallback scan finds a handle."""
+    post = parse_post("Продукт\n\nОбновили конфиг\n\nСпасибо @user1 за помощь")
+    assert [mention.username for mention in post.reviewers] == ["user1"], (
+        "the fallback scan does find the handle"
+    )
+    assert not post.has_labelled_reviewers
+    assert not post.looks_like_review
+
+
 def test_malformed_post_never_raises() -> None:
     for text in ("", "\n\n\n", "https://", "@", "Платежи"):
         assert parse_post(text) is not None

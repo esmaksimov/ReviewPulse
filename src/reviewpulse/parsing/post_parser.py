@@ -33,7 +33,7 @@ _USERNAME = re.compile(r"(?<![\w@/.])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 # alongside rather than instead of the English ones.
 _REVIEWER_WORDS = r"ревью\w*|reviewers?|revisor(?:es)?|revisión|revisor[ei]|评审人?"
 _TASK_WORDS = r"задача|таска|карточка|tasks?|tarea|attività|任务"
-_DOCS_WORDS = r"документация|docs?|documentation|documentaci[oó]n|documentazione|文档"
+_DOCS_WORDS = r"документация|дока|docs?|documentation|documentaci[oó]n|documentazione|文档"
 _DESCRIPTION_WORDS = r"описание|descriptions?|descripci[oó]n|descrizione|描述"
 
 _REVIEWER_LABEL = re.compile(rf"^\s*(?:{_REVIEWER_WORDS})\s*[:\-：]", re.IGNORECASE)
@@ -83,11 +83,18 @@ class ParsedPost(BaseModel):
     docs_url: str | None = None
     merge_requests: list[MergeRequestRef] = Field(default_factory=list)
     reviewers: list[ReviewerMention] = Field(default_factory=list)
+    #: True when a recognized reviewer-label line was found — a deliberate signal,
+    #: unlike `reviewers` on its own, which can come from scanning the whole post for
+    #: any @handle when no label line exists (see `_find_reviewers`).
+    has_labelled_reviewers: bool = False
 
     @property
     def looks_like_review(self) -> bool:
-        """Only posts carrying at least one MR link are tracked as reviews."""
-        return bool(self.merge_requests)
+        """A post is tracked as a review if it names an MR, or explicitly labels its
+        reviewers — a docs-only or infra-only change can go through review without
+        ever touching a merge request, as long as reviewers were named on purpose.
+        A bare @handle floating in ordinary chatter, with neither, is not enough."""
+        return bool(self.merge_requests) or (self.has_labelled_reviewers and bool(self.reviewers))
 
 
 def parse_post(text: str, entities: list | None = None) -> ParsedPost:
@@ -108,6 +115,7 @@ def parse_post(text: str, entities: list | None = None) -> ParsedPost:
         docs_url=_labelled_url(lines, _DOCS_LABEL),
         merge_requests=find_merge_requests(text),
         reviewers=_dedupe(reviewers),
+        has_labelled_reviewers=any(_REVIEWER_LABEL.match(line) for line in lines),
     )
 
 

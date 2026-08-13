@@ -99,8 +99,11 @@ migrazioni si applicano da sole all'avvio.
 ## Come si presenta
 
 Il bot legge i post in base alla loro forma, non a un template rigido — entrambi gli
-esempi qui sotto funzionano. Serve esattamente una cosa: **almeno un link a una MR**;
-senza, il post viene trattato come un annuncio e non viene tracciato.
+esempi qui sotto funzionano. Perché un post conti come review serve una di due cose:
+**almeno un link a una MR**, oppure **una riga di revisori etichettata
+esplicitamente** (così una modifica solo di documentazione o di infrastruttura, senza
+MR, viene comunque tracciata, purché i revisori siano stati nominati di proposito).
+Senza nessuna delle due, il post è un annuncio e non viene tracciato.
 
 > Le etichette ("Revisori:", "MR:", "Documentazione:", ...) sono riconosciute in
 > qualunque lingua parli il bot stesso — un team che scrive in russo o cinese ottiene
@@ -340,7 +343,7 @@ silenzio sull'inglese in produzione.
 | Comando | Cosa fa |
 |---|---|
 | `/start` | ti registra; collega il tuo @username al tuo id e trova le review in sospeso su di te |
-| `/status` | cosa è in sospeso su di te adesso, con le scadenze |
+| `/status` | cosa è in sospeso su di te adesso, con le scadenze e un link a ogni post |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
 | `/lang <codice>` | cambia la lingua del bot per i tuoi messaggi privati |
 | `/mute 2h`, `/unmute` | silenzia / riattiva i promemoria |

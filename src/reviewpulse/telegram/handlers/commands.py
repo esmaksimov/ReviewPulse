@@ -79,6 +79,7 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
                 row.state,
                 policy.deadline_for(repo.to_domain(row)),
                 settings.timezone_offset_hours,
+                card.review_url(row.review),
             )
         )
     await message.answer("\n".join(lines), disable_web_page_preview=True)

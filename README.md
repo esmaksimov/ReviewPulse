@@ -97,8 +97,10 @@ themselves on startup.
 ## What it looks like
 
 The bot reads posts by shape, not by a rigid template — both examples below work. It
-needs exactly one thing: **at least one merge-request link**; without one, a post is
-treated as an announcement and never tracked.
+needs one of two things to treat a post as a review at all: **at least one
+merge-request link**, or **an explicitly labelled reviewer line** (so a docs-only or
+infra-only change with no MR still gets tracked, as long as reviewers were named on
+purpose). Without either, a post is an announcement and is never tracked.
 
 > Label words ("Review:", "MR:", "Docs:", ...) are recognized in every language the
 > bot itself speaks — a team posting in Spanish or Chinese gets the same parsing a
@@ -327,7 +329,7 @@ production.
 | Command | What it does |
 |---|---|
 | `/start` | registers you; links your @handle to your id and finds reviews waiting on you |
-| `/status` | what's on you right now, with deadlines |
+| `/status` | what's on you right now, with deadlines and a link to each post |
 | `/link <username>` | link your GitLab account (for Mode B) |
 | `/lang <code>` | switch the bot's language for your own DMs |
 | `/mute 2h`, `/unmute` | go quiet / start reminding again |

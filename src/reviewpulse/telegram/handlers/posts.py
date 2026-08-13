@@ -10,6 +10,11 @@ Two updates describe the same post and arrive in an unpredictable order:
 Only (2) gives us somewhere to reply, and only (1) is guaranteed to carry the full text,
 so both handlers upsert the same row and then try to publish the card. Whichever lands
 second is the one that actually posts it.
+
+Both are also handled on *edit*, not just on first arrival: a post that didn't parse
+as a review yet (missing a label the parser didn't know, say) can be turned into one
+retroactively just by editing it in the channel — no restart or manual command needed,
+as long as the bot is already running the code that understands the new label.
 """
 
 from __future__ import annotations
@@ -53,6 +58,7 @@ async def on_channel_post(
 
 
 @router.message(F.is_automatic_forward, F.forward_origin)
+@router.edited_message(F.is_automatic_forward, F.forward_origin)
 async def on_discussion_copy(
     message: Message, session: AsyncSession, bot: Bot, settings: Settings
 ) -> None:

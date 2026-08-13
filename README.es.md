@@ -96,8 +96,11 @@ migraciones se aplican solas al iniciar.
 ## Cómo se ve
 
 El bot lee las publicaciones por su forma, no por una plantilla rígida — los dos
-ejemplos de abajo funcionan igual. Necesita exactamente una cosa: **al menos un enlace
-a un MR**; sin uno, la publicación se trata como un anuncio y no se rastrea.
+ejemplos de abajo funcionan igual. Para que una publicación cuente como revisión hace
+falta una de dos cosas: **al menos un enlace a un MR**, o **una línea de revisores
+etiquetada explícitamente** (así un cambio solo de documentación o de infraestructura,
+sin MR, también se rastrea, siempre que los revisores se hayan nombrado a propósito).
+Sin ninguna de las dos, la publicación es un anuncio y no se rastrea.
 
 > Las etiquetas ("Revisión:", "MR:", "Documentación:", ...) se reconocen en cualquier
 > idioma que hable el propio bot — un equipo que escribe en ruso o chino obtiene el
@@ -332,7 +335,7 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 | Comando | Qué hace |
 |---|---|
 | `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
-| `/status` | qué tienes pendiente ahora mismo, con plazos |
+| `/status` | qué tienes pendiente ahora mismo, con plazos y un enlace a cada publicación |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
 | `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
 | `/mute 2h`, `/unmute` | silenciar / volver a avisar |

@@ -499,11 +499,17 @@ def nudge(
 
 
 def status_line(
-    locale: str, headline: str, state: ReviewerState, deadline: datetime, tz_hours: int
+    locale: str,
+    headline: str,
+    state: ReviewerState,
+    deadline: datetime,
+    tz_hours: int,
+    url: str | None = None,
 ) -> str:
     local = deadline.astimezone(_tz(tz_hours))
     word = t(locale, "status_line_deadline")
-    return f"• <b>{headline}</b> — {state_label(locale, state)} ({word} {local:%d.%m %H:%M})"
+    title = f'<a href="{url}">{headline}</a>' if url else headline
+    return f"• <b>{title}</b> — {state_label(locale, state)} ({word} {local:%d.%m %H:%M})"
 
 
 def humanize(locale: str, delta: timedelta) -> str:
