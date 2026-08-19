@@ -53,10 +53,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_pending_body": "Ты ещё не поставил вердикт.",
         "nudge_overdue": "Просрочка: {duration} рабочего времени",
         "nudge_open_discussion": "Открыть обсуждение",
+        "author_changes_requested_title": "✍️ <b>Просят правки</b>",
+        "author_changes_requested_body": "{reviewer} оставил(а) замечания по твоему ревью.",
         "unit_minute": "мин",
         "unit_hour": "ч",
         "status_header": "<b>Ревью на тебе</b>",
+        "status_author_header": "<b>Ревью, где правки просят у тебя</b>",
         "status_line_deadline": "дедлайн",
+        "status_author_line_suffix": "правки просят: {who}",
         "nothing_pending": "На тебе ничего не висит. 🎉",
         "start_message": (
             "Привет! Я слежу за ревью в канале и напоминаю, когда мяч на твоей стороне.\n\n"
@@ -70,6 +74,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "/unmute — снова беспокоить"
         ),
         "start_found_open": "\n\nНашёл открытых ревью на тебе: {count}. Посмотреть — /status",
+        "start_found_authored": (
+            "\n\nТеперь буду уведомлять о правках по твоим ревью ({count}). Посмотреть — /status"
+        ),
         "no_username": (
             "У тебя не задан @username в Telegram. Я узнаю ревьюверов по нику из поста, "
             "так что без него не смогу связать тебя с ревью — задай ник в настройках "
@@ -131,10 +138,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_pending_body": "You haven't given a verdict yet.",
         "nudge_overdue": "Overdue by: {duration} of working time",
         "nudge_open_discussion": "Open discussion",
+        "author_changes_requested_title": "✍️ <b>Changes requested</b>",
+        "author_changes_requested_body": "{reviewer} left feedback on your review.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Reviews waiting on you</b>",
+        "status_author_header": "<b>Reviews waiting on your fixes</b>",
         "status_line_deadline": "due",
+        "status_author_line_suffix": "changes requested by: {who}",
         "nothing_pending": "Nothing is waiting on you. 🎉",
         "start_message": (
             "Hi! I keep an eye on reviews in the channel and DM whoever the ball is on.\n\n"
@@ -148,6 +159,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "/unmute — start reminding again"
         ),
         "start_found_open": "\n\nFound open reviews on you: {count}. Check them — /status",
+        "start_found_authored": (
+            "\n\nI'll now notify you about changes on your reviews ({count}). Check — /status"
+        ),
         "no_username": (
             "You don't have a @username set in Telegram. I match reviewers by the "
             "handle in the post, so without one I can't link you to a review — set a "
@@ -208,10 +222,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_pending_body": "Todavía no diste tu veredicto.",
         "nudge_overdue": "Retraso: {duration} de tiempo laboral",
         "nudge_open_discussion": "Abrir discusión",
+        "author_changes_requested_title": "✍️ <b>Se solicitaron cambios</b>",
+        "author_changes_requested_body": "{reviewer} dejó comentarios en tu revisión.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Revisiones pendientes de ti</b>",
+        "status_author_header": "<b>Revisiones que esperan tus cambios</b>",
         "status_line_deadline": "plazo",
+        "status_author_line_suffix": "cambios solicitados por: {who}",
         "nothing_pending": "No tienes nada pendiente. 🎉",
         "start_message": (
             "¡Hola! Sigo las revisiones del canal y aviso por privado a quien tenga "
@@ -226,6 +244,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "/unmute — volver a avisar"
         ),
         "start_found_open": "\n\nEncontré revisiones pendientes en ti: {count}. Míralas — /status",
+        "start_found_authored": (
+            "\n\nAhora te avisaré de los cambios en tus revisiones ({count}). Mira — /status"
+        ),
         "no_username": (
             "No tienes un @username configurado en Telegram. Identifico a los "
             "revisores por el usuario que aparece en la publicación, así que sin uno "
@@ -288,10 +309,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_pending_body": "Non hai ancora dato un verdetto.",
         "nudge_overdue": "In ritardo di: {duration} di tempo lavorativo",
         "nudge_open_discussion": "Apri la discussione",
+        "author_changes_requested_title": "✍️ <b>Modifiche richieste</b>",
+        "author_changes_requested_body": "{reviewer} ha lasciato un commento sulla tua review.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Review in attesa da parte tua</b>",
+        "status_author_header": "<b>Review in attesa delle tue modifiche</b>",
         "status_line_deadline": "scadenza",
+        "status_author_line_suffix": "modifiche richieste da: {who}",
         "nothing_pending": "Non hai nulla in sospeso. 🎉",
         "start_message": (
             "Ciao! Tengo d'occhio le review nel canale e scrivo in privato a chi ha "
@@ -306,6 +331,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "/unmute — riattiva i promemoria"
         ),
         "start_found_open": "\n\nHo trovato review aperte su di te: {count}. Guardale — /status",
+        "start_found_authored": (
+            "\n\nOra ti avviserò delle modifiche sulle tue review ({count}). Guarda — /status"
+        ),
         "no_username": (
             "Non hai uno @username impostato su Telegram. Riconosco i revisori dallo "
             "username nel post, quindi senza non posso collegarti a una review — "
@@ -361,10 +389,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_pending_body": "你还没有给出结论。",
         "nudge_overdue": "已超时：{duration}（工作时间）",
         "nudge_open_discussion": "打开讨论",
+        "author_changes_requested_title": "✍️ <b>有人要求修改</b>",
+        "author_changes_requested_body": "{reviewer} 对你的评审提出了意见。",
         "unit_minute": "分钟",
         "unit_hour": "小时",
         "status_header": "<b>等待你处理的评审</b>",
+        "status_author_header": "<b>等待你修改的评审</b>",
         "status_line_deadline": "截止",
+        "status_author_line_suffix": "要求修改的人：{who}",
         "nothing_pending": "目前没有等待你处理的评审。🎉",
         "start_message": (
             "你好！我会跟踪频道里的评审，并私信提醒当前轮到谁处理。\n\n"
@@ -377,6 +409,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "/unmute — 恢复提醒"
         ),
         "start_found_open": "\n\n发现 {count} 个等待你处理的评审，查看 — /status",
+        "start_found_authored": "\n\n现在会通知你评审意见（{count} 个）。查看 — /status",
         "no_username": (
             "你在 Telegram 中没有设置 @username。我是通过帖子里的用户名来识别评审人的，"
             "没有用户名就无法把你和评审关联起来——请在 Telegram 设置中添加用户名，"
@@ -510,6 +543,37 @@ def status_line(
     word = t(locale, "status_line_deadline")
     title = f'<a href="{url}">{headline}</a>' if url else headline
     return f"• <b>{title}</b> — {state_label(locale, state)} ({word} {local:%d.%m %H:%M})"
+
+
+def status_author_line(
+    locale: str, headline: str, reviewer_labels: list[str], url: str | None = None
+) -> str:
+    title = f'<a href="{url}">{headline}</a>' if url else headline
+    who = ", ".join(reviewer_labels)
+    return f"• <b>{title}</b> — {t(locale, 'status_author_line_suffix', who=who)}"
+
+
+def author_changes_requested(
+    locale: str,
+    reviewer: str,
+    headline: str,
+    review_url: str | None,
+    merge_request_urls: list[str],
+) -> str:
+    lines = [
+        t(locale, "author_changes_requested_title"),
+        "",
+        t(locale, "author_changes_requested_body", reviewer=reviewer),
+        "",
+        f"<b>{headline}</b>",
+    ]
+    if merge_request_urls:
+        lines.append("")
+        lines.extend(merge_request_urls)
+    if review_url:
+        lines.append("")
+        lines.append(f'<a href="{review_url}">{t(locale, "nudge_open_discussion")}</a>')
+    return "\n".join(lines)
 
 
 def humanize(locale: str, delta: timedelta) -> str:

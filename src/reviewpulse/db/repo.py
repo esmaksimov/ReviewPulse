@@ -130,6 +130,7 @@ async def nudgeable_assignments(
             Review.is_closed.is_(False),
             ReviewerAssignment.state.in_(list(NUDGEABLE)),
             ReviewerAssignment.telegram_user_id.is_not(None),
+            ReviewerAssignment.removed_at.is_(None),
             ~muted_or_unreachable,
         )
         .options(selectinload(ReviewerAssignment.review).selectinload(Review.merge_requests))
@@ -144,7 +145,10 @@ async def assignments_for_user(
     query = (
         select(ReviewerAssignment)
         .join(Review)
-        .where(ReviewerAssignment.telegram_user_id == telegram_user_id)
+        .where(
+            ReviewerAssignment.telegram_user_id == telegram_user_id,
+            ReviewerAssignment.removed_at.is_(None),
+        )
         .options(selectinload(ReviewerAssignment.review).selectinload(Review.merge_requests))
         .order_by(ReviewerAssignment.ball_since)
     )
@@ -167,9 +171,25 @@ async def unlinked_assignments_for_username(
         .where(
             ReviewerAssignment.telegram_user_id.is_(None),
             ReviewerAssignment.username.ilike(username),
+            ReviewerAssignment.removed_at.is_(None),
             Review.is_closed.is_(False),
         )
         .options(selectinload(ReviewerAssignment.review))
+    )
+    return list(result.scalars().all())
+
+
+async def unlinked_authored_reviews_for_username(
+    session: AsyncSession, username: str
+) -> list[Review]:
+    """Reviews whose "Автор:" line named this handle before it resolved to an id —
+    backfilled the same way `unlinked_assignments_for_username` is, on /start."""
+    result = await session.execute(
+        select(Review).where(
+            Review.author_user_id.is_(None),
+            Review.author_username.ilike(username),
+            Review.is_closed.is_(False),
+        )
     )
     return list(result.scalars().all())
 
@@ -182,10 +202,37 @@ async def find_assignment(
         .where(
             ReviewerAssignment.review_id == review_id,
             ReviewerAssignment.telegram_user_id == telegram_user_id,
+            ReviewerAssignment.removed_at.is_(None),
         )
         .options(selectinload(ReviewerAssignment.review))
     )
     return result.scalar_one_or_none()
+
+
+async def reviews_awaiting_author(
+    session: AsyncSession, telegram_user_id: int
+) -> list[Review]:
+    """Open reviews this person authored where a reviewer is waiting on their fixes.
+
+    Requires `Review.author_user_id` to already be linked — see
+    `services.reviews._sync_author` — which only happens for a post that named its
+    author on an "Автор:" line, since a channel post carries no `from_user` to infer
+    it from.
+    """
+    result = await session.execute(
+        select(Review)
+        .join(ReviewerAssignment)
+        .where(
+            Review.author_user_id == telegram_user_id,
+            Review.is_closed.is_(False),
+            ReviewerAssignment.state == ReviewerState.CHANGES_REQUESTED,
+            ReviewerAssignment.removed_at.is_(None),
+        )
+        .options(selectinload(Review.assignments), selectinload(Review.merge_requests))
+        .distinct()
+        .order_by(Review.posted_at)
+    )
+    return list(result.scalars().all())
 
 
 # --- domain <-> row conversion ---------------------------------------------

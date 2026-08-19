@@ -35,14 +35,19 @@ _REVIEWER_WORDS = r"ревью\w*|reviewers?|revisor(?:es)?|revisión|revisor[ei
 _TASK_WORDS = r"задача|таска|карточка|tasks?|tarea|attività|任务"
 _DOCS_WORDS = r"документация|дока|docs?|documentation|documentaci[oó]n|documentazione|文档"
 _DESCRIPTION_WORDS = r"описание|descriptions?|descripci[oó]n|descrizione|描述"
+#: Opt-in: naming yourself here is what lets the bot notify you when a reviewer
+#: requests changes and show it in your /status — see `services.reviews._sync_author`.
+_AUTHOR_WORDS = r"автор\w*|authors?|autor(?:es)?|autore|作者"
 
 _REVIEWER_LABEL = re.compile(rf"^\s*(?:{_REVIEWER_WORDS})\s*[:\-：]", re.IGNORECASE)
 _TASK_LABEL = re.compile(rf"^\s*(?:{_TASK_WORDS})\s*[:\-：]", re.IGNORECASE)
 _DOCS_LABEL = re.compile(rf"^\s*(?:{_DOCS_WORDS})\s*[:\-：]", re.IGNORECASE)
+_AUTHOR_LABEL = re.compile(rf"^\s*(?:{_AUTHOR_WORDS})\s*[:\-：]", re.IGNORECASE)
 
 #: Lines that are metadata, never the story/task title.
 _ANY_LABEL = re.compile(
-    rf"^\s*(mr\b|мр\b|{_REVIEWER_WORDS}|{_TASK_WORDS}|{_DOCS_WORDS}|{_DESCRIPTION_WORDS})",
+    rf"^\s*(mr\b|мр\b|{_REVIEWER_WORDS}|{_TASK_WORDS}|{_DOCS_WORDS}|{_DESCRIPTION_WORDS}|"
+    rf"{_AUTHOR_WORDS})",
     re.IGNORECASE,
 )
 
@@ -87,6 +92,9 @@ class ParsedPost(BaseModel):
     #: unlike `reviewers` on its own, which can come from scanning the whole post for
     #: any @handle when no label line exists (see `_find_reviewers`).
     has_labelled_reviewers: bool = False
+    #: Opt-in, from an "Автор:"-style line — unlike `reviewers` there is no fallback
+    #: scan for this, since guessing wrong would notify the wrong person.
+    author: ReviewerMention | None = None
 
     @property
     def looks_like_review(self) -> bool:
@@ -116,6 +124,7 @@ def parse_post(text: str, entities: list | None = None) -> ParsedPost:
         merge_requests=find_merge_requests(text),
         reviewers=_dedupe(reviewers),
         has_labelled_reviewers=any(_REVIEWER_LABEL.match(line) for line in lines),
+        author=_find_author(lines),
     )
 
 
@@ -154,6 +163,22 @@ def _continuation(rest: list[str]) -> list[str]:
             break
         block.append(line)
     return block
+
+
+def _find_author(lines: list[str]) -> ReviewerMention | None:
+    """The single @handle on an "Автор:"-style line, if there is one.
+
+    Unlike `_find_reviewers`, there is no whole-post fallback: an unlabelled @handle
+    could be anyone mentioned in passing, and guessing wrong would DM a stranger every
+    time a reviewer requests changes. No handle on the label line — a bare name, say
+    — leaves the author unresolved rather than guessing at one.
+    """
+    for line in lines:
+        if not _AUTHOR_LABEL.match(line):
+            continue
+        found = _USERNAME.findall(line)
+        return ReviewerMention(username=found[0]) if found else None
+    return None
 
 
 def _labelled_url(lines: list[str], label: re.Pattern[str]) -> str | None:

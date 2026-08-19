@@ -115,8 +115,14 @@ class Review(Base, TimestampMixin):
     discussion_message_id: Mapped[int | None] = mapped_column(Integer)
     card_message_id: Mapped[int | None] = mapped_column(Integer)
 
+    #: Set once the "Автор:" handle (see `parsing.post_parser`) resolves to a numeric
+    #: id — immediately if that person already talked to the bot, otherwise on their
+    #: next /start (see `services.reviews.link_author_to_reviews`).
     author_user_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
     author_label: Mapped[str | None] = mapped_column(String(256))
+    #: The @handle itself, kept even before it resolves to an id — that's what the
+    #: backfill on /start matches against.
+    author_username: Mapped[str | None] = mapped_column(String(64), index=True)
 
     product: Mapped[str | None] = mapped_column(String(256))
     title: Mapped[str | None] = mapped_column(String(512))
@@ -138,7 +144,11 @@ class Review(Base, TimestampMixin):
 
     @property
     def approvals(self) -> int:
-        return sum(1 for item in self.assignments if item.state == ReviewerState.APPROVED)
+        return sum(
+            1
+            for item in self.assignments
+            if item.state == ReviewerState.APPROVED and item.removed_at is None
+        )
 
 
 class MergeRequestLink(Base):
@@ -198,6 +208,12 @@ class ReviewerAssignment(Base, TimestampMixin):
 
     #: Set once, so we don't spam the thread asking an unregistered reviewer to /start.
     registration_hint_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    #: Set when a later edit of the post no longer names this reviewer. Never deleted
+    #: outright — a verdict already given must survive the post being reworded — but a
+    #: removed row stops counting toward quorum, drops off the card, and is not nudged.
+    #: Cleared if the same handle is named again in a later edit.
+    removed_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
 
     review: Mapped[Review] = relationship(back_populates="assignments")
 

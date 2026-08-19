@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from reviewpulse.db.models import MergeRequestLink, Review
+from datetime import UTC, datetime
+
+from reviewpulse.db.models import MergeRequestLink, Review, ReviewerAssignment
+from reviewpulse.domain.state import ReviewerState
 from reviewpulse.telegram import card
 
 
@@ -46,3 +49,31 @@ def test_merge_request_pairs_label_short_project_and_iid() -> None:
     assert card.merge_request_pairs(review) == [
         ("api!42", "https://git.example.com/backend/api/-/merge_requests/42")
     ]
+
+
+def test_render_drops_a_reviewer_removed_by_a_later_edit() -> None:
+    """A dropped reviewer (see services.reviews._sync_assignments) must vanish from
+    the card, not just stop counting toward quorum."""
+    review = Review(
+        id=1,
+        channel_chat_id=-1,
+        channel_message_id=1,
+        discussion_chat_id=-2,
+        discussion_message_id=1,
+        author_user_id=555,
+    )
+    review.assignments = [
+        ReviewerAssignment(
+            mention_key="un:user1", display_label="@user1", state=ReviewerState.PENDING
+        ),
+        ReviewerAssignment(
+            mention_key="un:user2",
+            display_label="@user2",
+            state=ReviewerState.PENDING,
+            removed_at=datetime(2026, 8, 19, tzinfo=UTC),
+        ),
+    ]
+
+    text, _ = card.render(review, approvals_cap=2, locale="en")
+    assert "@user1" in text
+    assert "@user2" not in text

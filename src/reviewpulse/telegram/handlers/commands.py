@@ -20,6 +20,7 @@ from ...config import Settings
 from ...db import repo
 from ...db.models import utcnow
 from ...domain.escalation import policy_from_settings
+from ...domain.state import ReviewerState
 from ...domain.workhours import calendar_from_settings
 from ...i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
 from ...services import reviews as review_service
@@ -55,9 +56,12 @@ async def on_start(message: Message, session: AsyncSession, settings: Settings) 
         return
 
     linked = await review_service.link_user_to_assignments(session, user.id, user.username)
+    linked_authored = await review_service.link_author_to_reviews(session, user.id, user.username)
     reply = texts.t(locale, "start_message")
     if linked:
         reply += texts.t(locale, "start_found_open", count=linked)
+    if linked_authored:
+        reply += texts.t(locale, "start_found_authored", count=linked_authored)
     await message.answer(reply)
 
 
@@ -65,23 +69,43 @@ async def on_start(message: Message, session: AsyncSession, settings: Settings) 
 async def on_status(message: Message, session: AsyncSession, settings: Settings) -> None:
     locale = await _locale_for(session, message, settings)
     assignments = await repo.assignments_for_user(session, message.from_user.id)
-    if not assignments:
+    authored = await repo.reviews_awaiting_author(session, message.from_user.id)
+    if not assignments and not authored:
         await message.answer(texts.t(locale, "nothing_pending"))
         return
 
-    policy = policy_from_settings(settings, calendar_from_settings(settings))
-    lines = [texts.t(locale, "status_header"), ""]
-    for row in assignments:
-        lines.append(
-            texts.status_line(
-                locale,
-                card.headline(row.review, locale),
-                row.state,
-                policy.deadline_for(repo.to_domain(row)),
-                settings.timezone_offset_hours,
-                card.review_url(row.review),
+    lines: list[str] = []
+    if assignments:
+        policy = policy_from_settings(settings, calendar_from_settings(settings))
+        lines += [texts.t(locale, "status_header"), ""]
+        for row in assignments:
+            lines.append(
+                texts.status_line(
+                    locale,
+                    card.headline(row.review, locale),
+                    row.state,
+                    policy.deadline_for(repo.to_domain(row)),
+                    settings.timezone_offset_hours,
+                    card.review_url(row.review),
+                )
             )
-        )
+
+    if authored:
+        if lines:
+            lines.append("")
+        lines += [texts.t(locale, "status_author_header"), ""]
+        for review in authored:
+            reviewers = [
+                row.display_label
+                for row in review.assignments
+                if row.state is ReviewerState.CHANGES_REQUESTED and row.removed_at is None
+            ]
+            lines.append(
+                texts.status_author_line(
+                    locale, card.headline(review, locale), reviewers, card.review_url(review)
+                )
+            )
+
     await message.answer("\n".join(lines), disable_web_page_preview=True)
 
 

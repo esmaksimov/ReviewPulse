@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import repo
 from ..db.models import MergeRequestLink, Review, ReviewerAssignment, utcnow
-from ..domain.state import Event, IllegalTransition, ReviewerState
+from ..domain.state import NUDGEABLE, Event, IllegalTransition, ReviewerState
 from ..parsing.post_parser import ParsedPost
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ async def create_or_update_review(
         review.author_label = author_label
 
     await session.flush()
+    await _sync_author(session, review, post)
     _sync_merge_requests(review, post)
     await _sync_assignments(session, review, post, posted_at)
     await session.flush()
@@ -88,6 +89,32 @@ async def create_or_update_review(
     return review
 
 
+async def _sync_author(session: AsyncSession, review: Review, post: ParsedPost) -> None:
+    """Resolve an opt-in "Автор:" line to a Telegram id, the same way a reviewer's
+    @handle resolves.
+
+    There is no fallback for this one: unlike reviewers, an author with no labelled
+    line is simply not tracked (see `parsing.post_parser._find_author`) — channel
+    posts carry no `from_user`, so without a self-named handle the bot has no way to
+    know who to notify, and this review's author-side features (the DM on "changes
+    requested", the /status entry) just stay inert for it.
+    """
+    mention = post.author
+    if mention is None:
+        return
+
+    review.author_username = mention.username
+    if review.author_label is None:
+        review.author_label = mention.label
+
+    if mention.user_id is not None:
+        review.author_user_id = mention.user_id
+    elif mention.username:
+        user = await repo.get_user_by_username(session, mention.username)
+        if user is not None:
+            review.author_user_id = user.telegram_user_id
+
+
 def _sync_merge_requests(review: Review, post: ParsedPost) -> None:
     existing = {(link.project_path, link.iid) for link in review.merge_requests}
     for ref in post.merge_requests:
@@ -101,18 +128,41 @@ def _sync_merge_requests(review: Review, post: ParsedPost) -> None:
 async def _sync_assignments(
     session: AsyncSession, review: Review, post: ParsedPost, posted_at: datetime
 ) -> None:
-    """Add reviewers named in the post. Existing ones keep their state.
+    """Add reviewers newly named in the post; drop ones no longer named.
 
-    Reviewers are never removed on edit: someone who already gave a verdict should not
-    lose it because the post was reworded.
+    A dropped reviewer is never deleted outright — someone who already gave a verdict
+    should not lose it because the post was reworded — it is just marked `removed_at`,
+    which excludes it from quorum, the card and nudges (see `Review.approvals`,
+    `approvals_needed`, `repo.nudgeable_assignments`). Naming the same handle again in
+    a later edit clears that mark.
+
+    This reconciliation only runs when the post has an explicit reviewer-labelled
+    line (`has_labelled_reviewers`): that is a deliberate declaration of who reviews
+    this. Without one, `post.reviewers` is just whatever @handles happen to float in
+    the text — see `_find_reviewers`'s whole-post fallback — far too noisy a signal to
+    drop someone over.
     """
-    existing = {row.mention_key for row in review.assignments}
+    by_key = {row.mention_key: row for row in review.assignments}
+    named_keys: set[str] = set()
 
     for mention in post.reviewers:
-        if mention.key in existing:
+        named_keys.add(mention.key)
+        existing_row = by_key.get(mention.key)
+        if existing_row is not None:
+            if existing_row.removed_at is not None:
+                existing_row.removed_at = None
+                if existing_row.state in NUDGEABLE:
+                    existing_row.ball_since = posted_at
             continue
         # The author reviewing their own MR is a template artefact, not an assignment.
-        if mention.user_id is not None and mention.user_id == review.author_user_id:
+        is_author = (
+            mention.user_id is not None and mention.user_id == review.author_user_id
+        ) or (
+            mention.username is not None
+            and review.author_username is not None
+            and mention.username.lower() == review.author_username.lower()
+        )
+        if is_author:
             continue
 
         telegram_user_id = mention.user_id
@@ -130,6 +180,11 @@ async def _sync_assignments(
                 ball_since=posted_at,
             )
         )
+
+    if post.has_labelled_reviewers:
+        for row in review.assignments:
+            if row.mention_key not in named_keys and row.removed_at is None:
+                row.removed_at = posted_at
 
 
 async def apply_verdict(
@@ -196,8 +251,14 @@ def approvals_needed(review: Review, cap: int) -> int:
     verdict that was never coming just leaves the review stuck. List two (or more)
     and it takes that many, up to `cap` (default 2): naming a long list of reviewers
     doesn't gate the review on unanimous approval, it just needs the team's usual quorum.
+
+    Only counts reviewers currently named on the post (`removed_at is None`) — a
+    reviewer dropped in a later edit must not keep propping up the denominator, or a
+    stale approval from before they were dropped could count toward a quorum the
+    people actually on the review never reached.
     """
-    return max(1, min(len(review.assignments), cap))
+    active = sum(1 for row in review.assignments if row.removed_at is None)
+    return max(1, min(active, cap))
 
 
 async def _close_if_enough_approvals(
@@ -230,6 +291,20 @@ async def reopen_review(session: AsyncSession, review: Review) -> bool:
     review.closed_at = None
     await session.flush()
     return True
+
+
+async def link_author_to_reviews(
+    session: AsyncSession, telegram_user_id: int, username: str
+) -> int:
+    """Backfill the telegram id onto reviews whose "Автор:" line named this handle
+    before this person had ever talked to the bot. Mirrors `link_user_to_assignments`
+    for reviewers; called from the same places (/start, any button press).
+    """
+    reviews = await repo.unlinked_authored_reviews_for_username(session, username)
+    for review in reviews:
+        review.author_user_id = telegram_user_id
+    await session.flush()
+    return len(reviews)
 
 
 async def link_user_to_assignments(

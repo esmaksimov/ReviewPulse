@@ -36,7 +36,9 @@ def render(review: Review, approvals_cap: int, locale: str) -> tuple[str, object
     actually shown and enforced scales down to the number of named reviewers — see
     `services.reviews.approvals_needed`. `locale` is `Settings.default_locale`: the
     card is shared, so it cannot follow any one reviewer's language."""
-    rows = [(row.display_label, row.state) for row in review.assignments]
+    rows = [
+        (row.display_label, row.state) for row in review.assignments if row.removed_at is None
+    ]
     text = texts.card(
         locale,
         headline=headline(review, locale),

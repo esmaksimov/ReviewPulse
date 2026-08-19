@@ -218,6 +218,35 @@ def test_chinese_labels_are_recognized() -> None:
     assert [mention.username for mention in post.reviewers] == ["user1", "user2"]
 
 
+def test_an_author_line_is_parsed_opt_in() -> None:
+    post = parse_post(REAL_POST + "\n\nАвтор: @poster")
+    assert post.author is not None
+    assert post.author.username == "poster"
+
+
+def test_no_author_line_leaves_the_author_unresolved() -> None:
+    post = parse_post(REAL_POST)
+    assert post.author is None
+
+
+def test_an_author_line_without_a_handle_is_not_guessed_at() -> None:
+    """A bare name gives us nothing to DM — better to leave it unresolved than to
+    misattribute the review to whoever happens to be mentioned elsewhere in it."""
+    post = parse_post(REAL_POST + "\n\nАвтор: Иван Иванов")
+    assert post.author is None
+
+
+def test_english_author_label_is_recognized() -> None:
+    post = parse_post(
+        "Payments\nConnection pool rework\n\n"
+        "MR: https://git.example.com/backend/api/-/merge_requests/1112\n\n"
+        "Review: @user1 @user2\n\n"
+        "Author: @poster"
+    )
+    assert post.author is not None
+    assert post.author.username == "poster"
+
+
 def test_a_handle_and_its_text_mention_are_merged_into_one_reviewer() -> None:
     @dataclass
     class FakeUser:

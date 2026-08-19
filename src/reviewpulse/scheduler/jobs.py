@@ -11,11 +11,12 @@ from ..config import Settings
 from ..db import repo
 from ..db.session import Database
 from ..domain.escalation import policy_from_settings
+from ..domain.state import Event
 from ..domain.workhours import calendar_from_settings
 from ..gitlab.client import GitLabClient
 from ..services import gitlab_sync, nudges
 from ..telegram import card
-from ..telegram.sender import TelegramNudgeSender
+from ..telegram.sender import TelegramNudgeSender, notify_author_changes_requested
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,21 @@ async def gitlab_tick(bot: Bot, database: Database, settings: Settings) -> None:
             if review is not None:
                 await card.refresh(
                     bot, review, settings.required_approvals, settings.default_locale
+                )
+
+        # GitLab can put the ball back on the author on its own (a reviewer reopens a
+        # thread after the fixes landed) — same notice as the card's ✍️ button.
+        for change in changes:
+            if change.event is not Event.REQUEST_CHANGES:
+                continue
+            review = await repo.get_review(session, change.assignment.review_id)
+            if review is not None:
+                await notify_author_changes_requested(
+                    bot,
+                    session,
+                    review,
+                    change.assignment.display_label,
+                    settings.default_locale,
                 )
 
     if changes:

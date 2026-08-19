@@ -110,6 +110,149 @@ async def test_editing_a_post_preserves_verdicts_already_given(session) -> None:
     assert review.title == "Доработка connection pool (v2)"
 
 
+async def test_editing_a_post_drops_a_reviewer_no_longer_named(session) -> None:
+    """The reviewer line is authoritative: dropping a handle from it must drop the
+    assignment too, or a stale reviewer keeps propping up the approval count."""
+    review = await make_review(session)
+    assert {row.username for row in review.assignments} == {"user1", "user2"}
+
+    edited = POST.replace("Ревью: @user1 @user2", "Ревью: @user2")
+    review = await make_review(session, text=edited)
+
+    active = [row for row in review.assignments if row.removed_at is None]
+    assert {row.username for row in active} == {"user2"}
+    dropped = next(row for row in review.assignments if row.username == "user1")
+    assert dropped.removed_at is not None
+    assert review_service.approvals_needed(review, cap=2) == 1
+
+
+async def test_a_dropped_reviewers_stale_approval_does_not_count_toward_quorum(session) -> None:
+    """The exact bug this guards against: user1 approves, the post is then edited to
+    swap them for user3 — the review must not close on user1's now-stale 👍 plus a
+    single approval from one of the two people actually named."""
+    review = await make_review(session)
+    await link(session, "user1", 101)
+    await link(session, "user2", 102)
+
+    first = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, first, Event.APPROVE)
+    await session.commit()
+
+    edited = POST.replace("Ревью: @user1 @user2", "Ревью: @user2 @user3")
+    review = await make_review(session, text=edited)
+    await link(session, "user3", 103)
+
+    assert review.approvals == 0, "user1's approval must not count once they're dropped"
+    assert review_service.approvals_needed(review, cap=2) == 2
+
+    second = await repo.find_assignment(session, review.id, 102)
+    result = await review_service.apply_verdict(session, second, Event.APPROVE)
+    assert not result.review_closed, "only one of the two real reviewers has approved"
+
+    third = await repo.find_assignment(session, review.id, 103)
+    result = await review_service.apply_verdict(session, third, Event.APPROVE)
+    assert result.review_closed
+
+
+async def test_re_adding_a_dropped_reviewer_clears_the_drop(session) -> None:
+    review = await make_review(session)
+
+    without_user2 = POST.replace("Ревью: @user1 @user2", "Ревью: @user1")
+    review = await make_review(session, text=without_user2)
+    dropped = next(row for row in review.assignments if row.username == "user2")
+    assert dropped.removed_at is not None
+
+    review = await make_review(session, text=POST)
+    restored = next(row for row in review.assignments if row.username == "user2")
+    assert restored.removed_at is None
+    assert restored.state is ReviewerState.PENDING
+
+
+async def test_an_edit_with_no_reviewer_line_never_drops_anyone(session) -> None:
+    """Without an explicit reviewer-labelled line, `post.reviewers` only reflects
+    whatever @handles happen to appear in the text — too noisy to treat as the
+    authoritative reviewer list. A reword that drops the label entirely must not
+    silently wipe out every assignment."""
+    review = await make_review(session)
+
+    edited = POST.replace("Ревью: @user1 @user2", "см. обсуждение с @user1 @user2")
+    review = await make_review(session, text=edited)
+
+    assert all(row.removed_at is None for row in review.assignments)
+
+
+async def test_an_author_line_resolves_immediately_when_the_handle_is_already_known(
+    session,
+) -> None:
+    """Posting the author is opt-in — see `parsing.post_parser._find_author` — and
+    resolves the same way a reviewer's @handle does."""
+    await repo.upsert_user(session, 555, username="alice")
+    review = await make_review(session, text=POST + "\nАвтор: @alice")
+
+    assert review.author_user_id == 555
+    assert review.author_username == "alice"
+
+
+async def test_an_author_lines_unknown_handle_is_backfilled_on_start(session) -> None:
+    review = await make_review(session, text=POST + "\nАвтор: @alice")
+    assert review.author_user_id is None
+    assert review.author_username == "alice"
+
+    await repo.upsert_user(session, 555, username="alice")
+    linked = await review_service.link_author_to_reviews(session, 555, "alice")
+
+    assert linked == 1
+    assert review.author_user_id == 555
+
+
+async def test_editing_the_author_line_reassigns_authorship(session) -> None:
+    await repo.upsert_user(session, 555, username="alice")
+    await repo.upsert_user(session, 777, username="bobby")
+    review = await make_review(session, text=POST + "\nАвтор: @alice")
+    assert review.author_user_id == 555
+
+    edited = (POST + "\nАвтор: @bobby").replace(
+        "Доработка connection pool", "Доработка connection pool (v2)"
+    )
+    review = await make_review(session, text=edited)
+
+    assert review.author_user_id == 777
+    assert review.author_username == "bobby"
+
+
+async def test_without_an_author_line_no_author_is_tracked(session) -> None:
+    review = await make_review(session)
+    assert review.author_user_id is None
+    assert review.author_username is None
+
+
+async def test_the_author_reviewing_their_own_post_is_not_added_as_a_reviewer(session) -> None:
+    """Mirrors the existing user_id-based self-review skip, but keyed off the
+    @handle: the author's own telegram id is not known yet at post time."""
+    text = POST.replace("Ревью: @user1 @user2", "Ревью: @user1 @user2 @alice") + "\nАвтор: @alice"
+    review = await make_review(session, text=text)
+
+    assert {row.username for row in review.assignments} == {"user1", "user2"}
+
+
+async def test_reviews_awaiting_author_lists_only_open_changes_requested(session) -> None:
+    await repo.upsert_user(session, 555, username="alice")
+    review = await make_review(session, text=POST + "\nАвтор: @alice")
+    await link(session, "user1", 101)
+    await link(session, "user2", 102)
+
+    assert await repo.reviews_awaiting_author(session, 555) == []
+
+    reviewer = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, reviewer, Event.REQUEST_CHANGES)
+
+    waiting = await repo.reviews_awaiting_author(session, 555)
+    assert [item.id for item in waiting] == [review.id]
+
+    await review_service.mark_fixes_done(session, review)
+    assert await repo.reviews_awaiting_author(session, 555) == []
+
+
 async def test_two_approvals_close_the_review(session) -> None:
     review = await make_review(session)
     await link(session, "user1", 101)

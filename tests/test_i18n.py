@@ -96,3 +96,23 @@ def test_status_line_without_a_url_still_shows_the_headline() -> None:
     line = texts.status_line("en", "Payments", ReviewerState.PENDING, deadline, 3)
     assert "Payments" in line
     assert "<a href" not in line
+
+
+def test_status_author_line_names_who_asked_for_changes() -> None:
+    line = texts.status_author_line("en", "Payments", ["@alice", "@bob"])
+    assert "Payments" in line
+    assert "@alice, @bob" in line
+
+
+def test_author_changes_requested_names_the_reviewer_and_links_the_review() -> None:
+    message = texts.author_changes_requested(
+        "en",
+        reviewer="@alice",
+        headline="Payments",
+        review_url="https://t.me/c/123/456",
+        merge_request_urls=["https://git.example.com/x/-/merge_requests/1"],
+    )
+    assert "@alice" in message
+    assert "Payments" in message
+    assert "https://t.me/c/123/456" in message
+    assert "https://git.example.com/x/-/merge_requests/1" in message
