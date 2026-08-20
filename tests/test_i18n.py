@@ -116,3 +116,102 @@ def test_author_changes_requested_names_the_reviewer_and_links_the_review() -> N
     assert "Payments" in message
     assert "https://t.me/c/123/456" in message
     assert "https://git.example.com/x/-/merge_requests/1" in message
+
+
+# --- HTML escaping ----------------------------------------------------------
+#
+# Every message goes out with parse_mode=HTML, so an unescaped "<" in a post title
+# makes Telegram reject the whole message ("can't parse entities") and the bot looks
+# like it simply ignored the user. That is not hypothetical: posting the pinned
+# template — whose placeholders are written in angle brackets — into the channel got
+# it tracked as a review, and that took /status down for everyone named on it.
+
+#: A template placeholder left in a post: the shape that broke production.
+UNSAFE = "<название продукта>"
+ESCAPED = "&lt;название продукта&gt;"
+
+
+def test_esc_replaces_exactly_telegrams_four_entities() -> None:
+    assert texts.esc('<b> & "x"') == "&lt;b&gt; &amp; &quot;x&quot;"
+
+
+def test_esc_leaves_apostrophes_alone() -> None:
+    """html.escape(quote=True) would emit &#x27;, which Telegram renders literally."""
+    assert texts.esc("L'autore n'est pas") == "L'autore n'est pas"
+
+
+def test_a_post_title_with_angle_brackets_is_escaped_in_the_card() -> None:
+    from reviewpulse.domain.state import ReviewerState
+
+    text = texts.card(
+        "ru",
+        headline=UNSAFE,
+        rows=[("@user1", ReviewerState.PENDING)],
+        is_closed=False,
+        approvals=0,
+        required_approvals=2,
+        merge_requests=[],
+    )
+    assert ESCAPED in text
+    assert UNSAFE not in text
+
+
+def test_a_post_title_with_angle_brackets_is_escaped_in_a_status_line() -> None:
+    from datetime import datetime
+
+    from reviewpulse.domain.state import ReviewerState
+
+    deadline = datetime(2026, 8, 13, 10, 20, tzinfo=UTC)
+    line = texts.status_line("ru", UNSAFE, ReviewerState.PENDING, deadline, 3)
+    assert ESCAPED in line
+    assert UNSAFE not in line
+
+
+def test_a_post_title_with_angle_brackets_is_escaped_in_a_nudge() -> None:
+    from datetime import timedelta
+
+    from reviewpulse.domain.escalation import NudgeReason
+
+    message = texts.nudge(
+        "ru",
+        reason=NudgeReason.NO_REACTION,
+        headline=UNSAFE,
+        overdue_by=timedelta(hours=2),
+        review_url="https://t.me/c/123/456",
+        merge_request_urls=[],
+    )
+    assert ESCAPED in message
+    assert UNSAFE not in message
+
+
+def test_a_post_title_with_angle_brackets_is_escaped_for_the_author_notice() -> None:
+    message = texts.author_changes_requested(
+        "ru",
+        reviewer="@alice",
+        headline=UNSAFE,
+        review_url=None,
+        merge_request_urls=[],
+    )
+    assert ESCAPED in message
+    assert UNSAFE not in message
+
+
+def test_substituted_values_are_escaped_but_the_template_keeps_its_markup() -> None:
+    """/link takes free text straight from the user, so it must not carry markup in."""
+    line = texts.t("en", "link_done", login="<b>evil</b>")
+    assert "&lt;b&gt;evil&lt;/b&gt;" in line
+    assert "<code>" in line, "the template's own tags survive"
+
+
+def test_an_ampersand_in_a_merge_request_url_is_escaped() -> None:
+    text = texts.card(
+        "en",
+        headline="Payments",
+        rows=[],
+        is_closed=False,
+        approvals=0,
+        required_approvals=1,
+        merge_requests=[("api!1", "https://git.example.com/x/-/merge_requests/1?a=1&b=2")],
+        unparsed_reviewers=False,
+    )
+    assert "a=1&amp;b=2" in text

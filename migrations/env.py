@@ -16,8 +16,15 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
+#
+# `disable_existing_loggers=False` is load-bearing, not tidiness: migrations run
+# in-process on startup (see `__main__.migrate`), after `logging.basicConfig` and
+# after aiogram is imported. The default True would switch off every logger that
+# already exists — the bot's own and aiogram's alike — so for the rest of the
+# process's life nothing would be logged at all, including the tracebacks of
+# handlers that crash.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

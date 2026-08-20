@@ -7,6 +7,12 @@ replies, button-press toasts — uses the individual reviewer's own locale.
 Strings live in `_STRINGS[locale][key]`, fetched through `t()`. A handful of composite
 messages (the card, a nudge, a status line) are assembled by dedicated functions that
 call `t()` for each piece and stitch them together with the runtime data.
+
+Every message here is sent with `parse_mode=HTML` (see `telegram.bot.build_bot`), so
+the templates own their markup and *every* runtime value spliced into them must go
+through `esc()` first. Skipping it is not a cosmetic bug: a post titled
+"<Название продукта>" made Telegram reject the whole message with "can't parse
+entities", which reads to the user as the bot silently ignoring /status.
 """
 
 from __future__ import annotations
@@ -16,6 +22,25 @@ from datetime import datetime, timedelta, timezone
 from ..domain.escalation import NudgeReason
 from ..domain.state import ReviewerState
 from ..i18n import FALLBACK_LOCALE
+
+
+def esc(value: object) -> str:
+    """Escape one runtime value (a post title, an @handle, a URL) for HTML mode.
+
+    Telegram's HTML parser recognises exactly four entities — `&lt;`, `&gt;`, `&amp;`
+    and `&quot;` — so those are what we replace, and nothing else. `html.escape` is
+    deliberately not used: with `quote=True` it also emits `&#x27;` for apostrophes,
+    which Telegram does not decode and would render literally in ordinary prose.
+
+    Safe in both text and attribute position, so `href="{esc(url)}"` is covered too.
+    """
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 #: Native name of each language, for the /lang confirmation and its usage hint.
 LANGUAGE_NAMES: dict[str, str] = {
@@ -453,10 +478,17 @@ _STATE_KEYS: dict[ReviewerState, str] = {
 
 def t(locale: str, key: str, **kwargs: object) -> str:
     """Look up one string. Falls back to English, then to the raw key, so a gap in a
-    translation degrades to readable English rather than a crash or a blank line."""
+    translation degrades to readable English rather than a crash or a blank line.
+
+    Substituted values are escaped, the template is not: the template is our own copy
+    and owns whatever `<b>` it carries, while every kwarg is runtime data (a @handle,
+    a GitLab login typed into /link) that must not be able to inject markup.
+    """
     table = _STRINGS.get(locale) or _STRINGS[FALLBACK_LOCALE]
     template = table.get(key) or _STRINGS[FALLBACK_LOCALE].get(key, key)
-    return template.format(**kwargs) if kwargs else template
+    if not kwargs:
+        return template
+    return template.format(**{name: esc(value) for name, value in kwargs.items()})
 
 
 def state_label(locale: str, state: ReviewerState) -> str:
@@ -479,7 +511,7 @@ def card(
     unparsed_reviewers: bool = False,
 ) -> str:
     """`merge_requests` are (label, url) pairs, e.g. ("utils!223", "https://...")."""
-    lines = [f"<b>{headline}</b>"]
+    lines = [f"<b>{esc(headline)}</b>"]
 
     if is_closed:
         lines.append(
@@ -494,11 +526,11 @@ def card(
         lines.append("\n" + t(locale, "card_unparsed_reviewers"))
     elif rows:
         lines.append("")
-        lines.extend(f"• {label} — {state_label(locale, state)}" for label, state in rows)
+        lines.extend(f"• {esc(label)} — {state_label(locale, state)}" for label, state in rows)
 
     if merge_requests:
         lines.append("")
-        lines.extend(f'<a href="{url}">{label}</a>' for label, url in merge_requests)
+        lines.extend(f'<a href="{esc(url)}">{esc(label)}</a>' for label, url in merge_requests)
 
     return "\n".join(lines)
 
@@ -519,15 +551,15 @@ def nudge(
     lines = [
         head,
         "",
-        f"<b>{headline}</b>",
+        f"<b>{esc(headline)}</b>",
         t(locale, "nudge_overdue", duration=humanize(locale, overdue_by)),
     ]
     if merge_request_urls:
         lines.append("")
-        lines.extend(merge_request_urls)
+        lines.extend(esc(url) for url in merge_request_urls)
     if review_url:
         lines.append("")
-        lines.append(f'<a href="{review_url}">{t(locale, "nudge_open_discussion")}</a>')
+        lines.append(f'<a href="{esc(review_url)}">{t(locale, "nudge_open_discussion")}</a>')
     return "\n".join(lines)
 
 
@@ -541,14 +573,14 @@ def status_line(
 ) -> str:
     local = deadline.astimezone(_tz(tz_hours))
     word = t(locale, "status_line_deadline")
-    title = f'<a href="{url}">{headline}</a>' if url else headline
+    title = f'<a href="{esc(url)}">{esc(headline)}</a>' if url else esc(headline)
     return f"• <b>{title}</b> — {state_label(locale, state)} ({word} {local:%d.%m %H:%M})"
 
 
 def status_author_line(
     locale: str, headline: str, reviewer_labels: list[str], url: str | None = None
 ) -> str:
-    title = f'<a href="{url}">{headline}</a>' if url else headline
+    title = f'<a href="{esc(url)}">{esc(headline)}</a>' if url else esc(headline)
     who = ", ".join(reviewer_labels)
     return f"• <b>{title}</b> — {t(locale, 'status_author_line_suffix', who=who)}"
 
@@ -565,14 +597,14 @@ def author_changes_requested(
         "",
         t(locale, "author_changes_requested_body", reviewer=reviewer),
         "",
-        f"<b>{headline}</b>",
+        f"<b>{esc(headline)}</b>",
     ]
     if merge_request_urls:
         lines.append("")
-        lines.extend(merge_request_urls)
+        lines.extend(esc(url) for url in merge_request_urls)
     if review_url:
         lines.append("")
-        lines.append(f'<a href="{review_url}">{t(locale, "nudge_open_discussion")}</a>')
+        lines.append(f'<a href="{esc(review_url)}">{t(locale, "nudge_open_discussion")}</a>')
     return "\n".join(lines)
 
 
