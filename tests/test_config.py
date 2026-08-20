@@ -63,3 +63,49 @@ def test_the_shipped_env_example_actually_loads() -> None:
     assert settings.work_start == time(9, 0)
     assert settings.required_approvals == 2
     assert not settings.gitlab_configured
+
+
+# --- logging ----------------------------------------------------------------
+#
+# Migrations run in-process at startup, and alembic's env.py hands alembic.ini to
+# `fileConfig`, which pins the root logger to WARNING and installs its own handler.
+# Left alone, that outlives the migration step and the bot logs nothing for the rest
+# of the process — which is exactly why an HTML-escaping crash in /status left no
+# trace in `docker logs` and had to be diagnosed from the database instead.
+
+
+def test_logging_survives_the_config_alembic_leaves_behind() -> None:
+    import logging
+
+    from reviewpulse.__main__ import configure_logging
+
+    root = logging.getLogger()
+    original_level, original_handlers = root.level, root.handlers[:]
+    try:
+        # What fileConfig(alembic.ini) leaves behind.
+        root.handlers = [logging.NullHandler()]
+        root.setLevel(logging.WARNING)
+
+        configure_logging(load(BOT_TOKEN="t", LOG_LEVEL="INFO"))
+
+        assert root.level == logging.INFO, "an INFO deploy must not be left at WARNING"
+        assert root.handlers, "the app needs a handler of its own, not alembic's"
+        assert not any(isinstance(h, logging.NullHandler) for h in root.handlers)
+    finally:
+        root.handlers = original_handlers
+        root.setLevel(original_level)
+
+
+def test_log_level_setting_is_honoured() -> None:
+    import logging
+
+    from reviewpulse.__main__ import configure_logging
+
+    root = logging.getLogger()
+    original_level, original_handlers = root.level, root.handlers[:]
+    try:
+        configure_logging(load(BOT_TOKEN="t", LOG_LEVEL="WARNING"))
+        assert root.level == logging.WARNING
+    finally:
+        root.handlers = original_handlers
+        root.setLevel(original_level)

@@ -77,13 +77,27 @@ async def run(settings: Settings) -> None:
         await database.dispose()
 
 
-def main() -> None:
-    settings = get_settings()
+def configure_logging(settings: Settings) -> None:
+    """(Re)install the bot's own logging setup, replacing whatever is there.
+
+    Has to be called *after* `migrate()` as well as before it: alembic's env.py runs
+    `fileConfig` on alembic.ini, which swaps in its own console handler and pins the
+    root logger to WARNING. Those settings would otherwise outlive the migration step
+    and silence every INFO the bot emits — reviews tracked, verdicts applied,
+    reminders sent — for the rest of the process's life.
+    """
     logging.basicConfig(
         level=settings.log_level.upper(),
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        force=True,
     )
+
+
+def main() -> None:
+    settings = get_settings()
+    configure_logging(settings)
     migrate(settings)
+    configure_logging(settings)
     with contextlib.suppress(KeyboardInterrupt, SystemExit):
         asyncio.run(run(settings))
 
