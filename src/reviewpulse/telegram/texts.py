@@ -149,6 +149,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "announce_project_unconfigured": (
             "Проект «{project}» не настроен для /announce — попроси добавить его в REVIEW_PROJECTS."
         ),
+        "announce_conflicting_projects": (
+            "Проект «{base}» настроен иначе, чем {others} — смешивать проекты в одном "
+            "/announce можно, только если у них одинаковый REVIEW_PROJECTS (продукт/"
+            "техлид/пул). Разбей на отдельные посты или приведи их конфиг к одному виду."
+        ),
         "announce_preview_intro": "Вот что получится — проверь и опубликуй, если всё верно.",
         "btn_announce_publish": "✅ Опубликовать",
         "btn_announce_reroll": "🔁 Другой ревьювер",
@@ -274,6 +279,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "announce_project_unconfigured": (
             'Project "{project}" isn\'t set up for /announce — ask for it to be '
             "added to REVIEW_PROJECTS."
+        ),
+        "announce_conflicting_projects": (
+            'Project "{base}" is configured differently than {others} — projects can '
+            "only be mixed in one /announce if their REVIEW_PROJECTS entries match "
+            "(product/techlead/pool). Split into separate posts, or align their configs."
         ),
         "announce_preview_intro": (
             "Here's what this will look like — check it and publish if it's right."
@@ -405,6 +415,12 @@ _STRINGS: dict[str, dict[str, str]] = {
             "El proyecto «{project}» no está configurado para /announce — pide "
             "que lo añadan a REVIEW_PROJECTS."
         ),
+        "announce_conflicting_projects": (
+            "El proyecto «{base}» está configurado de forma distinta a {others} — solo "
+            "se pueden mezclar proyectos en un /announce si su entrada en "
+            "REVIEW_PROJECTS coincide (producto/técnico líder/grupo). Divide en "
+            "publicaciones separadas o alinea su configuración."
+        ),
         "announce_preview_intro": "Así quedaría — revísalo y publica si está bien.",
         "btn_announce_publish": "✅ Publicar",
         "btn_announce_reroll": "🔁 Otro revisor",
@@ -535,6 +551,12 @@ _STRINGS: dict[str, dict[str, str]] = {
             "Il progetto «{project}» non è configurato per /announce — chiedi "
             "di aggiungerlo a REVIEW_PROJECTS."
         ),
+        "announce_conflicting_projects": (
+            "Il progetto «{base}» è configurato diversamente da {others} — si possono "
+            "unire più progetti in un solo /announce solo se la loro voce in "
+            "REVIEW_PROJECTS coincide (prodotto/techlead/pool). Dividi in post separati "
+            "o allinea le loro configurazioni."
+        ),
         "announce_preview_intro": "Ecco come verrà — controlla e pubblica se va bene.",
         "btn_announce_publish": "✅ Pubblica",
         "btn_announce_reroll": "🔁 Altro revisore",
@@ -651,6 +673,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "announce_no_mr": "没有在消息中找到 MR 链接。",
         "announce_project_unconfigured": (
             "项目「{project}」未在 REVIEW_PROJECTS 中配置 /announce，请找人添加。"
+        ),
+        "announce_conflicting_projects": (
+            "项目「{base}」与 {others} 的配置不一致——只有当涉及的仓库在 "
+            "REVIEW_PROJECTS 中配置相同（产品/负责人/候选池）时，才能在同一条 "
+            "/announce 里合并。请拆成多条公告，或统一它们的配置。"
         ),
         "announce_preview_intro": "预览如下——确认无误后发布。",
         "btn_announce_publish": "✅ 发布",

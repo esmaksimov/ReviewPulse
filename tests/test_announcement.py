@@ -78,19 +78,20 @@ def test_pick_reviewers_with_no_techlead_draws_the_full_count_from_the_pool() ->
     assert len(picks) == 2
 
 
-# --- resolve_project (pure) ---------------------------------------------------
+# --- resolve_projects (pure) ---------------------------------------------------
 
 
-def test_resolve_project_uses_the_first_mr_when_several_projects_are_referenced() -> None:
+def test_resolve_projects_lists_every_distinct_project_in_order() -> None:
     refs = [
         MergeRequestRef(host="git.example.com", project_path="backend/api", iid=1),
         MergeRequestRef(host="git.example.com", project_path="backend/utils", iid=2),
+        MergeRequestRef(host="git.example.com", project_path="backend/api", iid=3),
     ]
-    assert announcements.resolve_project(refs) == "backend/api"
+    assert announcements.resolve_projects(refs) == ["backend/api", "backend/utils"]
 
 
-def test_resolve_project_is_none_without_any_mr() -> None:
-    assert announcements.resolve_project([]) is None
+def test_resolve_projects_is_empty_without_any_mr() -> None:
+    assert announcements.resolve_projects([]) == []
 
 
 # --- create_draft --------------------------------------------------------------
@@ -168,6 +169,91 @@ async def test_create_draft_persists_the_resolved_config(session) -> None:
     assert [ref.iid for ref in repo.draft_merge_requests(draft)] == [1112]
     assert draft.published_at is None
     assert draft.cancelled_at is None
+
+
+# --- multiple MRs in one draft ---------------------------------------------------
+#
+# Real posts routinely name several MRs across several repos in one announcement
+# (`MR SC:` / `MR Utils:` / ... on separate lines, no label needed since the parser
+# finds every one by URL shape regardless). That's fine as long as every repo
+# named is configured identically in REVIEW_PROJECTS — and rejected outright, not
+# guessed at, the moment two of them disagree.
+
+
+async def test_create_draft_succeeds_when_every_referenced_project_shares_a_config(
+    session,
+) -> None:
+    shared = {"product": "Demo Product", "techlead": "lead", "pool": ["pool1", "pool2"]}
+    settings = make_settings(
+        **{"backend/api_controller": shared, "backend/checkout": shared, "backend/utils": shared}
+    )
+    text = (
+        "Доработка connection pool\n\n"
+        "https://git.example.com/backend/api_controller/-/merge_requests/547\n"
+        "https://git.example.com/backend/checkout/-/merge_requests/1145\n"
+        "https://git.example.com/backend/utils/-/merge_requests/434"
+    )
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+
+    assert draft.product == "Demo Product"
+    assert draft.project_path == "backend/api_controller"  # the first one — representative only
+    assert [ref.iid for ref in repo.draft_merge_requests(draft)] == [547, 1145, 434]
+
+
+async def test_create_draft_rejects_projects_with_disagreeing_configs(session) -> None:
+    settings = make_settings(
+        **{
+            "backend/api_controller": {"product": "Demo A", "techlead": "lead-a", "pool": ["p1"]},
+            "backend/checkout": {"product": "Demo B", "techlead": "lead-b", "pool": ["p2"]},
+        }
+    )
+    text = (
+        "Title\n\n"
+        "https://git.example.com/backend/api_controller/-/merge_requests/1\n"
+        "https://git.example.com/backend/checkout/-/merge_requests/2"
+    )
+    with pytest.raises(announcements.ConflictingProjectConfigs) as exc_info:
+        await announcements.create_draft(
+            session,
+            composer_user_id=1,
+            composer_username="author",
+            chat_id=1,
+            parsed=parse_post(text),
+            settings=settings,
+        )
+    assert exc_info.value.base_project == "backend/api_controller"
+    assert exc_info.value.conflicting_projects == ["backend/checkout"]
+
+
+async def test_create_draft_fails_closed_when_only_one_of_several_projects_is_configured(
+    session,
+) -> None:
+    """The configured one being first must not mask the missing one."""
+    settings = make_settings(
+        **{"backend/api_controller": {"product": "Demo", "techlead": "lead", "pool": ["p1"]}}
+    )
+    text = (
+        "Title\n\n"
+        "https://git.example.com/backend/api_controller/-/merge_requests/1\n"
+        "https://git.example.com/backend/unconfigured/-/merge_requests/2"
+    )
+    with pytest.raises(announcements.ProjectNotConfigured) as exc_info:
+        await announcements.create_draft(
+            session,
+            composer_user_id=1,
+            composer_username="author",
+            chat_id=1,
+            parsed=parse_post(text),
+            settings=settings,
+        )
+    assert exc_info.value.project_path == "backend/unconfigured"
 
 
 async def test_reroll_redraws_the_pool_but_keeps_the_techlead(session) -> None:

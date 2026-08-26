@@ -31,25 +31,49 @@ class ComposerHasNoUsername(Exception):
 
 
 class ProjectNotConfigured(Exception):
-    """`Settings.review_projects` has no entry for the resolved project."""
+    """`Settings.review_projects` has no entry for one of the referenced projects."""
 
     def __init__(self, project_path: str) -> None:
         super().__init__(f"no REVIEW_PROJECTS entry for {project_path!r}")
         self.project_path = project_path
 
 
+class ConflictingProjectConfigs(Exception):
+    """The referenced MRs span projects whose REVIEW_PROJECTS entries disagree.
+
+    Real posts routinely name several MRs across several repos in one announcement
+    (`MR SC:` / `MR Utils:` / ...) — that's fine as long as every repo involved is
+    configured the same way (same product/techlead/pool/reviewer_count).
+    If they're not, there is no principled way to pick a winner, so this is raised
+    instead of silently using whichever project happened to be named first.
+    """
+
+    def __init__(self, base_project: str, conflicting_projects: list[str]) -> None:
+        super().__init__(
+            f"{base_project!r} disagrees with {conflicting_projects!r} in REVIEW_PROJECTS"
+        )
+        self.base_project = base_project
+        self.conflicting_projects = conflicting_projects
+
+
 class ChannelNotConfigured(Exception):
     """`Settings.channel_id` isn't set — nowhere to publish to."""
 
 
-def resolve_project(merge_requests: list[MergeRequestRef]) -> str | None:
-    """Which `REVIEW_PROJECTS` entry applies to this draft.
+def resolve_projects(merge_requests: list[MergeRequestRef]) -> list[str]:
+    """Every distinct project referenced, in order of first appearance.
 
-    v1 rule: the first MR's project wins. Real posts do sometimes reference more than
-    one project (`MR SC:` / `MR Utils:` on separate lines) — this is a known, accepted
-    limitation rather than something worth resolving generically right now.
+    A post naming several MRs across several repos is normal (`MR SC:` / `MR Utils:` /
+    ... on separate lines) — the parser already finds every one of them by URL shape,
+    no label needed. Which single `REVIEW_PROJECTS` entry applies when they
+    span more than one repo is decided by `create_draft`, not here: this just reports
+    what was actually named.
     """
-    return merge_requests[0].project_path if merge_requests else None
+    seen: list[str] = []
+    for ref in merge_requests:
+        if ref.project_path not in seen:
+            seen.append(ref.project_path)
+    return seen
 
 
 def pick_reviewers(
@@ -90,7 +114,7 @@ async def create_draft(
     parsed: ParsedPost,
     settings: Settings,
 ) -> AnnouncementDraft:
-    """Resolve the project, draw reviewers, persist the draft.
+    """Resolve the project(s), draw reviewers, persist the draft.
 
     `parsed.product` is deliberately reinterpreted as the *title* here: the DM has no
     separate product line (product comes from `REVIEW_PROJECTS`, not from anything the
@@ -99,23 +123,31 @@ async def create_draft(
     if not composer_username:
         raise ComposerHasNoUsername
 
-    project_path = resolve_project(parsed.merge_requests)
-    if project_path is None:
+    project_paths = resolve_projects(parsed.merge_requests)
+    if not project_paths:
         raise NoMergeRequestFound
 
-    config = settings.review_projects.get(project_path)
-    if config is None:
-        raise ProjectNotConfigured(project_path)
+    configs: dict[str, ProjectReviewConfig] = {}
+    for path in project_paths:
+        config = settings.review_projects.get(path)
+        if config is None:
+            raise ProjectNotConfigured(path)
+        configs[path] = config
 
-    techlead, picks = pick_reviewers(config, composer_username=composer_username)
+    base_project, base_config = project_paths[0], configs[project_paths[0]]
+    conflicting = [path for path in project_paths[1:] if configs[path] != base_config]
+    if conflicting:
+        raise ConflictingProjectConfigs(base_project, conflicting)
+
+    techlead, picks = pick_reviewers(base_config, composer_username=composer_username)
 
     return await repo.create_draft(
         session,
         composer_user_id=composer_user_id,
         composer_username=composer_username,
         chat_id=chat_id,
-        project_path=project_path,
-        product=config.product,
+        project_path=base_project,
+        product=base_config.product,
         title=parsed.product,
         task_url=parsed.task_url,
         docs_url=parsed.docs_url,

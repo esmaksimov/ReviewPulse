@@ -71,6 +71,16 @@ async def on_announce(
             texts.t(locale, "announce_project_unconfigured", project=exc.project_path)
         )
         return
+    except announcements.ConflictingProjectConfigs as exc:
+        await message.answer(
+            texts.t(
+                locale,
+                "announce_conflicting_projects",
+                base=exc.base_project,
+                others=", ".join(exc.conflicting_projects),
+            )
+        )
+        return
 
     text, markup = announcement.render_preview(
         draft, composer_locale=locale, channel_locale=settings.default_locale

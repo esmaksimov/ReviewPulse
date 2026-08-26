@@ -183,6 +183,11 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 The author line resolves for free here — unlike a hand-typed post, the composer's
 identity is already known from the DM, with no opt-in tag needed.
 
+Naming several MR links pulls in several repos at once — fine as long as every one
+of them is configured identically in `REVIEW_PROJECTS`. If two named repos disagree
+(different product, techlead, or pool), the draft is rejected up front with the
+conflicting project names, rather than silently picking one of them.
+
 The card that appears in the comment thread under the post:
 
 ```
@@ -468,7 +473,9 @@ migrations/              Alembic
 - **Post parsing recognizes a fixed set of label words** per field (see
   [What it looks like](#what-it-looks-like)) — a label outside that list, in any
   language, falls back to positional heuristics rather than being read directly.
-- **`/announce` resolves the project from the first MR link only** — a draft
-  referencing more than one project uses the first one's `REVIEW_PROJECTS` entry.
+- **`/announce` requires every referenced project to be configured identically** — a
+  draft naming MRs from several repos is fine as long as their `REVIEW_PROJECTS`
+  entries match exactly (product/techlead/pool/reviewer_count); if they don't, the
+  draft is rejected with the conflicting project names rather than picking one.
 - **Stats only cover transitions recorded after the feature shipped** — there's no way
   to backfill reviews that closed before that history table existed.
