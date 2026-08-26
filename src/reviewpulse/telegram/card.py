@@ -25,10 +25,14 @@ def review_url(review: Review) -> str | None:
 
 
 def merge_request_pairs(review: Review) -> list[tuple[str, str]]:
-    return [
-        (f"{link.project_path.rsplit('/', 1)[-1]}!{link.iid}", link.web_url)
-        for link in review.merge_requests
-    ]
+    """(label, url) pairs — `project!42` for a GitLab MR, `project#42` for a GitHub
+    PR, matching each platform's own convention."""
+    pairs = []
+    for link in review.merge_requests:
+        name = link.project_path.rsplit("/", 1)[-1]
+        separator = "#" if link.platform == "github" else "!"
+        pairs.append((f"{name}{separator}{link.iid}", link.web_url))
+    return pairs
 
 
 def render(review: Review, approvals_cap: int, locale: str) -> tuple[str, object]:

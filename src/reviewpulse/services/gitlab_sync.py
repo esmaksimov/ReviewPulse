@@ -70,6 +70,8 @@ async def _fetch_snapshots(
     snapshots: list[MergeRequestSnapshot] = []
 
     for link in review.merge_requests:
+        if link.platform != "gitlab":
+            continue  # this poller only ever speaks the GitLab REST API
         ref = MergeRequestRef(host=link.host, project_path=link.project_path, iid=link.iid)
         try:
             merge_request = await client.get_merge_request(ref)

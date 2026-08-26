@@ -65,6 +65,16 @@ async def test_post_becomes_a_review_with_reviewers_and_merge_requests(session) 
     assert all(row.state is ReviewerState.PENDING for row in review.assignments)
 
 
+async def test_a_github_pull_request_link_is_tracked_with_its_platform(session) -> None:
+    text = POST + "\nPR: https://github.com/example-org/example-repo/pull/9"
+    review = await make_review(session, text=text)
+
+    assert {link.platform for link in review.merge_requests} == {"gitlab", "github"}
+    github_link = next(link for link in review.merge_requests if link.platform == "github")
+    assert github_link.iid == 9
+    assert github_link.web_url == "https://github.com/example-org/example-repo/pull/9"
+
+
 async def test_reprocessing_the_same_post_is_idempotent(session) -> None:
     """The channel post and its discussion-group copy both hit this path."""
     first = await make_review(session)

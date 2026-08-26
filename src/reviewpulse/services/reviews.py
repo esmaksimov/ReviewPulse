@@ -121,7 +121,9 @@ def _sync_merge_requests(review: Review, post: ParsedPost) -> None:
         if (ref.project_path, ref.iid) in existing:
             continue
         review.merge_requests.append(
-            MergeRequestLink(host=ref.host, project_path=ref.project_path, iid=ref.iid)
+            MergeRequestLink(
+                host=ref.host, project_path=ref.project_path, iid=ref.iid, platform=ref.platform
+            )
         )
 
 

@@ -165,6 +165,10 @@ class MergeRequestLink(Base):
     host: Mapped[str] = mapped_column(String(256))
     project_path: Mapped[str] = mapped_column(String(512))
     iid: Mapped[int] = mapped_column(Integer)
+    #: "gitlab" or "github" — which URL shape to reconstruct in `web_url`, and (for
+    #: "github") the signal `services.gitlab_sync` uses to skip a link the GitLab API
+    #: could never answer for. See `parsing.gitlab_url.MergeRequestRef`.
+    platform: Mapped[str] = mapped_column(String(16), default="gitlab")
 
     #: Cheap MR-wide signal used when a reviewer has no GitLab mapping.
     blocking_discussions_resolved: Mapped[bool | None] = mapped_column(Boolean)
@@ -175,6 +179,8 @@ class MergeRequestLink(Base):
 
     @property
     def web_url(self) -> str:
+        if self.platform == "github":
+            return f"https://{self.host}/{self.project_path}/pull/{self.iid}"
         return f"https://{self.host}/{self.project_path}/-/merge_requests/{self.iid}"
 
 

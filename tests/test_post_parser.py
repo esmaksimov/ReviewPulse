@@ -141,6 +141,36 @@ def test_project_path_is_url_encoded_for_the_api() -> None:
     assert ref is not None
     assert ref.encoded_project == "a%2Fb%2Fc"
     assert ref.short == "c!12"
+    assert ref.platform == "gitlab"
+
+
+def test_a_github_pull_request_link_is_recognized() -> None:
+    ref = parse_merge_request_url("https://github.com/example-org/example-repo/pull/42")
+    assert ref is not None
+    assert ref.platform == "github"
+    assert ref.project_path == "example-org/example-repo"
+    assert ref.iid == 42
+    assert ref.short == "example-repo#42"
+    assert ref.web_url == "https://github.com/example-org/example-repo/pull/42"
+
+
+def test_a_github_link_with_trailing_path_segments_still_matches() -> None:
+    """People paste /pull/42/files just as often as the bare PR link."""
+    ref = parse_merge_request_url("https://github.com/example-org/example-repo/pull/42/files")
+    assert ref is not None
+    assert ref.iid == 42
+
+
+def test_gitlab_and_github_links_are_both_found_in_the_same_post() -> None:
+    refs = find_merge_requests(
+        "MR: https://git.example.com/backend/api/-/merge_requests/1\n"
+        "PR: https://github.com/example-org/example-repo/pull/2"
+    )
+    assert [(r.platform, r.iid) for r in refs] == [("gitlab", 1), ("github", 2)]
+
+
+def test_a_plain_github_repo_link_without_pull_is_not_a_merge_request() -> None:
+    assert find_merge_requests("https://github.com/example-org/example-repo") == []
 
 
 def test_text_mentions_supply_the_user_id_for_handleless_reviewers() -> None:

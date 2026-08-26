@@ -1,17 +1,31 @@
-"""Extract GitLab merge-request coordinates from the links people paste in posts."""
+"""Extract merge/pull-request coordinates from the links people paste in posts.
+
+GitLab and GitHub use different URL shapes for the same idea (a GitLab merge request
+sits at `.../-/merge_requests/<n>`, a GitHub pull request at `.../pull/<n>`), so
+`MergeRequestRef` carries a `platform` field derived from whichever shape matched —
+that's what lets `web_url` (and everything downstream that renders one back out)
+reconstruct the right kind of link instead of always assuming GitLab.
+"""
 
 from __future__ import annotations
 
 import re
+from typing import Literal
 from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
 #: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
 #: The project path is everything between the host and the `/-/` separator.
-_MR_PATH = re.compile(r"^/(?P<project>.+?)/-/merge_requests/(?P<iid>\d+)")
+_GITLAB_MR_PATH = re.compile(r"^/(?P<project>.+?)/-/merge_requests/(?P<iid>\d+)")
+
+#: https://github.com/owner/repo/pull/1112 — always exactly two path segments before
+#: "pull", unlike GitLab's arbitrary group/subgroup nesting.
+_GITHUB_PR_PATH = re.compile(r"^/(?P<project>[^/]+/[^/]+)/pull/(?P<iid>\d+)")
 
 _URL_IN_TEXT = re.compile(r"https?://[^\s<>\"')]+")
+
+Platform = Literal["gitlab", "github"]
 
 
 class MergeRequestRef(BaseModel):
@@ -20,6 +34,7 @@ class MergeRequestRef(BaseModel):
     host: str = Field(min_length=1)
     project_path: str = Field(min_length=1)
     iid: int = Field(gt=0)
+    platform: Platform = "gitlab"
 
     @property
     def encoded_project(self) -> str:
@@ -28,29 +43,37 @@ class MergeRequestRef(BaseModel):
 
     @property
     def web_url(self) -> str:
+        if self.platform == "github":
+            return f"https://{self.host}/{self.project_path}/pull/{self.iid}"
         return f"https://{self.host}/{self.project_path}/-/merge_requests/{self.iid}"
 
     @property
     def short(self) -> str:
-        return f"{self.project_path.rsplit('/', 1)[-1]}!{self.iid}"
+        name = self.project_path.rsplit("/", 1)[-1]
+        separator = "#" if self.platform == "github" else "!"
+        return f"{name}{separator}{self.iid}"
 
 
 def parse_merge_request_url(url: str) -> MergeRequestRef | None:
     parts = urlsplit(url.strip())
     if not parts.netloc:
         return None
-    match = _MR_PATH.match(parts.path)
-    if not match:
-        return None
-    return MergeRequestRef(
-        host=parts.netloc,
-        project_path=match.group("project").strip("/"),
-        iid=int(match.group("iid")),
-    )
+
+    for platform, pattern in (("gitlab", _GITLAB_MR_PATH), ("github", _GITHUB_PR_PATH)):
+        match = pattern.match(parts.path)
+        if match:
+            return MergeRequestRef(
+                host=parts.netloc,
+                project_path=match.group("project").strip("/"),
+                iid=int(match.group("iid")),
+                platform=platform,
+            )
+    return None
 
 
 def find_merge_requests(text: str) -> list[MergeRequestRef]:
-    """All distinct MR links in a post, in order of appearance.
+    """All distinct MR/PR links in a post, GitLab and GitHub alike, in order of
+    appearance.
 
     Posts routinely carry more than one ("MR SC:" plus "MR Utils:"), and a review is
     only "fixed" once every one of them is clean — so we keep them all.

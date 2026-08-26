@@ -184,6 +184,36 @@ async def test_closed_reviews_are_not_polled(session, gitlab_mock) -> None:
     assert not route.called, "closed reviews must not spend API calls"
 
 
+async def test_a_github_linked_mr_is_never_polled_through_the_gitlab_client(
+    session, gitlab_mock
+) -> None:
+    """This poller only ever speaks the GitLab REST API — a GitHub PR link on the
+    same review must be skipped outright, not sent to the GitLab client (which would
+    build a nonsense URL and, here, trip respx's unmocked-request guard)."""
+    post_text = POST + "\nPR: https://github.com/example-org/example-repo/pull/9"
+    review = await review_service.create_or_update_review(
+        session,
+        channel_chat_id=-100,
+        channel_message_id=1,
+        post=parse_post(post_text),
+        raw_text=post_text,
+        posted_at=msk(27, 9, 0),
+    )
+    for username, telegram_id in (("user1", 101), ("user2", 102)):
+        await repo.upsert_user(session, telegram_id, username=username, full_name=None)
+        (await repo.get_user_by_telegram_id(session, telegram_id)).gitlab_username = username
+        await review_service.link_user_to_assignments(session, telegram_id, username)
+
+    reviewer = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, reviewer, Event.REQUEST_CHANGES, msk(27, 10, 0))
+    assert {link.platform for link in review.merge_requests} == {"gitlab", "github"}
+
+    mock_gitlab([thread("user1", resolved=True)])
+    changes = await run_sync(session)
+
+    assert [change.event for change in changes] == [Event.FIXES_DONE]
+
+
 async def test_reviews_with_nothing_to_move_are_not_polled(session, gitlab_mock) -> None:
     """Everyone is still PENDING: no thread state could change anything."""
     await setup_review(session)

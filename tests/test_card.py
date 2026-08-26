@@ -51,6 +51,18 @@ def test_merge_request_pairs_label_short_project_and_iid() -> None:
     ]
 
 
+def test_merge_request_pairs_uses_githubs_own_convention_for_a_github_link() -> None:
+    review = Review(channel_chat_id=-1, channel_message_id=1)
+    review.merge_requests = [
+        MergeRequestLink(
+            host="github.com", project_path="example-org/example-repo", iid=9, platform="github"
+        )
+    ]
+    assert card.merge_request_pairs(review) == [
+        ("example-repo#9", "https://github.com/example-org/example-repo/pull/9")
+    ]
+
+
 def test_render_drops_a_reviewer_removed_by_a_later_edit() -> None:
     """A dropped reviewer (see services.reviews._sync_assignments) must vanish from
     the card, not just stop counting toward quorum."""
