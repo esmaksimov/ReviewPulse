@@ -24,7 +24,8 @@ from ...domain.state import ReviewerState
 from ...domain.workhours import calendar_from_settings
 from ...i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
 from ...services import reviews as review_service
-from .. import card, texts
+from ...services import stats as stats_service
+from .. import card, stats_report, texts
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,26 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
             )
 
     await message.answer("\n".join(lines), disable_web_page_preview=True)
+
+
+@router.message(Command("stats"))
+async def on_stats(message: Message, session: AsyncSession, settings: Settings) -> None:
+    """The same digest `scheduler.jobs.stats_report_tick` sends periodically, on
+    demand. Restricted to `STATS_REPORT_RECIPIENT_IDS` — the numbers in it are
+    per-person timing data, not something to open up to everyone the bot knows."""
+    locale = await _locale_for(session, message, settings)
+    if message.from_user.id not in settings.stats_report_recipient_ids:
+        await message.answer(texts.t(locale, "stats_command_no_access"))
+        return
+
+    until = utcnow()
+    since = until - settings.stats_report_interval
+    transitions = await repo.transitions_between(session, since, until)
+    report = stats_service.build_report(transitions, since=since, until=until)
+    await message.answer(
+        stats_report.render(report, locale, settings.timezone_offset_hours),
+        disable_web_page_preview=True,
+    )
 
 
 @router.message(Command("link"))

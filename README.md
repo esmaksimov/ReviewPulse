@@ -148,6 +148,41 @@ Tracker and wiki links are never mistaken for MRs. Prose mixed into the reviewer
 doesn't hide the handles. If no reviewers could be identified, the bot doesn't stay
 silent — the card ships with a "🙋 I'm a reviewer" button instead.
 
+### Generating the post for you
+
+Instead of typing the whole thing by hand, DM the bot `/announce` with a title and the
+MR link(s) — it fills in the product name and picks reviewers itself, then posts the
+result to the channel:
+
+```
+/announce Connection pool rework
+https://gitlab.example.com/example/demo-project/-/merge_requests/1112
+Docs: https://wiki.example.com/pages/1
+```
+
+The bot replies with a preview and three buttons — **Publish**, **🔁 Reroll
+reviewer**, **Cancel** — so you can redraw the pick before it goes out (the reviewer
+it drew happens to be on vacation, say) or back out entirely. Once published, the post
+goes through the exact same parsing/tracking path as one typed by hand — nothing about
+it is treated specially.
+
+Reviewer selection is env-configured, one entry per GitLab project, keyed by the same
+`project_path` an MR URL already carries:
+
+```dotenv
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+```
+
+- `product` — shown on the generated post.
+- `techlead` *(optional)* — always included, unless they're the one running
+  `/announce`.
+- `pool` — candidates for the remaining slot(s), drawn at random, composer excluded.
+- `reviewer_count` *(optional, default 2)* — total reviewers on the post, techlead
+  included.
+
+The author line resolves for free here — unlike a hand-typed post, the composer's
+identity is already known from the DM, with no opt-in tag needed.
+
 The card that appears in the comment thread under the post:
 
 ```
@@ -298,6 +333,27 @@ thread can't silently revoke a 👍.
 
 ---
 
+## Team stats
+
+A periodic DM digest of two numbers, broken down per person: how long an author took
+to address "changes requested" once it landed, and how long a reviewer took to give
+their first verdict. Slowest averages listed first.
+
+Nothing is sent unless at least one recipient is configured:
+
+```dotenv
+STATS_REPORT_RECIPIENT_IDS=123456789,987654321
+STATS_REPORT_INTERVAL_DAYS=7
+```
+
+The same digest is available on demand with `/stats` — restricted to the same
+recipient list, since it's per-person timing data.
+
+Only counts from the moment this history started being recorded — there's no way to
+backfill reviews that closed before it existed.
+
+---
+
 ## Language support
 
 Supported: Russian, English, Spanish, Italian, Chinese (`ru`, `en`, `es`, `it`, `zh`).
@@ -330,9 +386,11 @@ production.
 |---|---|
 | `/start` | registers you; links your @handle to your id and finds reviews waiting on you |
 | `/status` | what's on you right now, with deadlines and a link to each post |
+| `/announce` | put together the channel post for you — see [Generating the post for you](#generating-the-post-for-you) |
 | `/link <username>` | link your GitLab account (for Mode B) |
 | `/lang <code>` | switch the bot's language for your own DMs |
 | `/mute 2h`, `/unmute` | go quiet / start reminding again |
+| `/stats` | the team-stats digest, on demand — configured recipients only, see [Team stats](#team-stats) |
 
 ---
 
@@ -344,7 +402,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 122 tests
+poetry run pytest                   # 197 tests
 poetry run ruff check src tests
 ```
 
@@ -389,8 +447,8 @@ src/reviewpulse/
   parsing/               post parsing and MR link extraction
   gitlab/                REST client and thread parsing
   db/                    models, session, queries
-  services/              domain + DB glue: reviews, nudges, GitLab sync
-  telegram/               bot, handlers, card, translated copy
+  services/              domain + DB glue: reviews, nudges, GitLab sync, announcements, stats
+  telegram/               bot, handlers, card, announcement & stats rendering, translated copy
   scheduler/              the nudge tick and the sync tick
 migrations/              Alembic
 ```
@@ -410,3 +468,7 @@ migrations/              Alembic
 - **Post parsing recognizes a fixed set of label words** per field (see
   [What it looks like](#what-it-looks-like)) — a label outside that list, in any
   language, falls back to positional heuristics rather than being read directly.
+- **`/announce` resolves the project from the first MR link only** — a draft
+  referencing more than one project uses the first one's `REVIEW_PROJECTS` entry.
+- **Stats only cover transitions recorded after the feature shipped** — there's no way
+  to backfill reviews that closed before that history table existed.

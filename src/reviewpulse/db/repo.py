@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..domain.state import NUDGEABLE, Assignment, ReviewerState
+from ..domain.state import NUDGEABLE, Assignment, Event, ReviewerState
 from ..i18n import normalize_locale
-from .models import MergeRequestLink, NudgeLog, Review, ReviewerAssignment, User
+from ..parsing.gitlab_url import MergeRequestRef
+from .models import (
+    AnnouncementDraft,
+    AssignmentTransition,
+    MergeRequestLink,
+    NudgeLog,
+    Review,
+    ReviewerAssignment,
+    User,
+    utcnow,
+)
 
 # --- users ------------------------------------------------------------------
 
@@ -257,6 +268,116 @@ def apply_domain(row: ReviewerAssignment, assignment: Assignment) -> None:
 
 
 # --- nudge log --------------------------------------------------------------
+
+
+# --- assignment transitions (stats) -----------------------------------------
+
+
+async def record_transition(
+    session: AsyncSession,
+    assignment: ReviewerAssignment,
+    *,
+    from_state: ReviewerState,
+    to_state: ReviewerState,
+    event: Event,
+    at: datetime,
+) -> None:
+    """Append-only history entry — see `AssignmentTransition`'s docstring for why
+    `ReviewerAssignment`'s own columns can't answer "how long was it in state X"."""
+    session.add(
+        AssignmentTransition(
+            assignment_id=assignment.id,
+            review_id=assignment.review_id,
+            from_state=from_state,
+            to_state=to_state,
+            event=event.value,
+            at=at,
+        )
+    )
+
+
+async def transitions_between(
+    session: AsyncSession, since: datetime, until: datetime
+) -> list[AssignmentTransition]:
+    """Ordered per-assignment so `services.stats` can pair consecutive rows directly."""
+    result = await session.execute(
+        select(AssignmentTransition)
+        .where(AssignmentTransition.at >= since, AssignmentTransition.at < until)
+        .order_by(AssignmentTransition.assignment_id, AssignmentTransition.at)
+    )
+    return list(result.scalars().all())
+
+
+# --- announcement drafts ------------------------------------------------------
+
+
+async def create_draft(
+    session: AsyncSession,
+    *,
+    composer_user_id: int,
+    composer_username: str,
+    chat_id: int,
+    project_path: str,
+    product: str,
+    title: str | None,
+    task_url: str | None,
+    docs_url: str | None,
+    merge_requests: list[MergeRequestRef],
+    techlead_username: str | None,
+    pool_pick_usernames: list[str],
+) -> AnnouncementDraft:
+    draft = AnnouncementDraft(
+        composer_user_id=composer_user_id,
+        composer_username=composer_username,
+        chat_id=chat_id,
+        project_path=project_path,
+        product=product,
+        title=title,
+        task_url=task_url,
+        docs_url=docs_url,
+        merge_requests_json=json.dumps([ref.model_dump() for ref in merge_requests]),
+        techlead_username=techlead_username,
+        pool_pick_usernames_json=json.dumps(pool_pick_usernames),
+    )
+    session.add(draft)
+    await session.flush()
+    return draft
+
+
+async def get_draft(session: AsyncSession, draft_id: int) -> AnnouncementDraft | None:
+    return await session.get(AnnouncementDraft, draft_id)
+
+
+async def set_draft_preview_message(
+    session: AsyncSession, draft: AnnouncementDraft, message_id: int
+) -> None:
+    draft.preview_message_id = message_id
+    await session.flush()
+
+
+async def set_draft_pool_picks(
+    session: AsyncSession, draft: AnnouncementDraft, usernames: list[str]
+) -> None:
+    draft.pool_pick_usernames_json = json.dumps(usernames)
+    await session.flush()
+
+
+async def mark_draft_published(session: AsyncSession, draft: AnnouncementDraft) -> None:
+    draft.published_at = utcnow()
+    await session.flush()
+
+
+async def mark_draft_cancelled(session: AsyncSession, draft: AnnouncementDraft) -> None:
+    draft.cancelled_at = utcnow()
+    await session.flush()
+
+
+def draft_merge_requests(draft: AnnouncementDraft) -> list[MergeRequestRef]:
+    return [MergeRequestRef(**item) for item in json.loads(draft.merge_requests_json)]
+
+
+def draft_pool_picks(draft: AnnouncementDraft) -> list[str]:
+    return list(json.loads(draft.pool_pick_usernames_json))
 
 
 async def record_nudge(

@@ -63,6 +63,49 @@ def test_the_shipped_env_example_actually_loads() -> None:
     assert settings.work_start == time(9, 0)
     assert settings.required_approvals == 2
     assert not settings.gitlab_configured
+    assert settings.review_projects["example/demo-project"].product == "Demo Product"
+    assert settings.stats_report_recipient_ids == []
+    assert settings.stats_report_interval_days == 7
+
+
+# --- /announce and stats config -----------------------------------------------
+#
+# REVIEW_PROJECTS and STATS_REPORT_RECIPIENT_IDS are the one place in this file that
+# *wants* pydantic-settings' default JSON/complex-type decoding — unlike the
+# comma-lists above, they carry structured data. That decoding only runs for values
+# pydantic-settings itself sources from the environment or a .env file — passed as a
+# plain __init__ kwarg (what `load()` above does), a JSON string is handed to the
+# dict field undecoded and fails validation. So these two tests set real process env
+# vars via monkeypatch instead, exercising the actual startup path.
+
+
+def test_review_projects_are_parsed_from_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TOKEN", "t")
+    monkeypatch.setenv(
+        "REVIEW_PROJECTS",
+        '{"backend/api":{"product":"Demo","techlead":"user1","pool":["user2","user3"]}}',
+    )
+    settings = Settings(_env_file=None)
+
+    config = settings.review_projects["backend/api"]
+    assert config.product == "Demo"
+    assert config.techlead == "user1"
+    assert config.pool == ["user2", "user3"]
+    assert config.reviewer_count == 2  # default
+
+
+def test_review_projects_defaults_to_empty_when_unset() -> None:
+    assert load(BOT_TOKEN="t").review_projects == {}
+
+
+def test_stats_report_recipient_ids_accepts_a_comma_list() -> None:
+    settings = load(BOT_TOKEN="t", STATS_REPORT_RECIPIENT_IDS="111, 222")
+    assert settings.stats_report_recipient_ids == [111, 222]
+
+
+def test_stats_report_interval_is_exposed_as_a_timedelta() -> None:
+    settings = load(BOT_TOKEN="t", STATS_REPORT_INTERVAL_DAYS="3")
+    assert settings.stats_report_interval == timedelta(days=3)
 
 
 # --- logging ----------------------------------------------------------------

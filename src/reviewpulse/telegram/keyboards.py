@@ -23,6 +23,11 @@ class SnoozeAction(CallbackData, prefix="sn"):
     hours: int  # 0 means "until tomorrow morning"
 
 
+class AnnounceAction(CallbackData, prefix="an"):
+    draft_id: int
+    action: str  # publish | reroll | cancel
+
+
 def review_card(
     review_id: int, locale: str, *, is_closed: bool, needs_reviewers: bool
 ) -> InlineKeyboardMarkup:
@@ -55,6 +60,27 @@ def review_card(
         callback_data=ReviewAction(review_id=review_id, action="close"),
     )
     builder.adjust(2, 2)
+    return builder.as_markup()
+
+
+def announce_preview(
+    draft_id: int, locale: str, *, has_pool_slot: bool
+) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=texts.t(locale, "btn_announce_publish"),
+        callback_data=AnnounceAction(draft_id=draft_id, action="publish"),
+    )
+    if has_pool_slot:
+        builder.button(
+            text=texts.t(locale, "btn_announce_reroll"),
+            callback_data=AnnounceAction(draft_id=draft_id, action="reroll"),
+        )
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=AnnounceAction(draft_id=draft_id, action="cancel"),
+    )
+    builder.adjust(2, 1) if has_pool_slot else builder.adjust(2)
     return builder.as_markup()
 
 

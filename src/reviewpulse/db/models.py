@@ -218,6 +218,76 @@ class ReviewerAssignment(Base, TimestampMixin):
     review: Mapped[Review] = relationship(back_populates="assignments")
 
 
+class AnnouncementDraft(Base, TimestampMixin):
+    """A `/announce`-in-progress: composed in a DM, published (or cancelled) later.
+
+    Server-side state rather than an in-memory dict — `callback_data` is capped at 64
+    bytes so it can only carry this row's id, and this app already treats every other
+    transient-but-restart-surviving thing (`snoozed_until`, `nudges_today`) as a DB
+    row rather than process memory. JSON-in-Text for the list-shaped fields is new
+    here: drafts are short-lived and never queried relationally, unlike
+    `Review`/`MergeRequestLink`, so a child table would be overkill.
+    """
+
+    __tablename__ = "announcement_drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    composer_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    composer_username: Mapped[str] = mapped_column(String(64))
+    #: The composer's private chat — where the preview lives and gets edited in place.
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    preview_message_id: Mapped[int | None] = mapped_column(Integer)
+
+    project_path: Mapped[str] = mapped_column(String(512))
+    product: Mapped[str] = mapped_column(String(256))
+    title: Mapped[str | None] = mapped_column(String(512))
+    task_url: Mapped[str | None] = mapped_column(Text)
+    docs_url: Mapped[str | None] = mapped_column(Text)
+    #: JSON list of {host, project_path, iid}.
+    merge_requests_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    techlead_username: Mapped[str | None] = mapped_column(String(64))
+    #: JSON list of usernames — the rerollable slot(s).
+    pool_pick_usernames_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    published_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
+    cancelled_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
+
+
+class AssignmentTransition(Base):
+    """One state change on a (review, reviewer) pair, with its timestamp.
+
+    `ReviewerAssignment` itself only ever holds the *current* state: `ball_since` and
+    `decided_at` are overwritten on every transition (see `services.reviews.apply_verdict`),
+    so the instant a reviewer's ✍️ becomes 👍, there is no longer any row anywhere
+    recording how long the ✍️ stood. This table is the append-only history that
+    survives it — the only source `services.stats` has for per-person durations:
+    author fix time (a row entering `changes_requested` paired with that same
+    assignment's next row leaving it) and reviewer response time (an assignment's very
+    first row). Necessarily forward-looking only: nothing before this table existed
+    can be reconstructed.
+    """
+
+    __tablename__ = "assignment_transitions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("reviewer_assignments.id", ondelete="CASCADE"), index=True
+    )
+    #: Denormalized from the assignment for stats queries that aggregate by author
+    #: (a `Review`-level fact) without an extra join on every row.
+    review_id: Mapped[int] = mapped_column(ForeignKey("reviews.id", ondelete="CASCADE"), index=True)
+
+    from_state: Mapped[ReviewerState] = mapped_column(REVIEWER_STATE)
+    to_state: Mapped[ReviewerState] = mapped_column(REVIEWER_STATE)
+    event: Mapped[str] = mapped_column(String(32))
+    at: Mapped[datetime] = mapped_column(UtcDateTime(), index=True)
+
+    assignment: Mapped[ReviewerAssignment] = relationship(lazy="selectin")
+    review: Mapped[Review] = relationship(lazy="selectin")
+
+
 class NudgeLog(Base):
     """Audit trail of every DM sent — makes "why did it ping me" answerable."""
 

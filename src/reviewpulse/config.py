@@ -6,7 +6,7 @@ from datetime import time, timedelta
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 #: List fields are annotated with NoDecode so the raw string reaches our validators.
@@ -14,6 +14,25 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 #: comma-separated values people naturally write ("0,1,2,3,4") — or an empty value —
 #: blow up before a validator ever sees them.
 IntList = Annotated[list[int], NoDecode]
+
+
+class ProjectReviewConfig(BaseModel):
+    """One GitLab project's setup for `/announce` — see `services.announcements`.
+
+    Keyed in `Settings.review_projects` by the same `project_path` slug
+    `parsing.gitlab_url` already extracts from an MR URL, so resolving "which config
+    applies" needs no new parsing.
+    """
+
+    product: str
+    #: Always included when set (and not the composer themself) — the "someone senior
+    #: always reviews this" slot. Optional: a project with none just draws every
+    #: reviewer from `pool`.
+    techlead: str | None = None
+    pool: list[str] = Field(default_factory=list)
+    #: Total reviewers on the generated post, techlead included. Mirrors
+    #: REQUIRED_APPROVALS's own default (2) but is set per project, independently.
+    reviewer_count: int = 2
 
 
 def _parse_hhmm(value: str) -> time:
@@ -57,6 +76,24 @@ class Settings(BaseSettings):
     gitlab_poll_minutes: int = Field(default=5, alias="GITLAB_POLL_MINUTES")
     gitlab_timeout_seconds: float = Field(default=10.0, alias="GITLAB_TIMEOUT_SECONDS")
 
+    # --- /announce (optional; empty means the command replies "not configured") ----
+    #: JSON object, keyed by project_path: {"product", "techlead", "pool", "reviewer_count"}.
+    #: Deliberately the one setting in this file that *wants* pydantic-settings' default
+    #: JSON decoding — unlike the comma-lists above, this is structured data, and never
+    #: belongs anywhere but a real .env: no roster of names is ever committed here.
+    review_projects: dict[str, ProjectReviewConfig] = Field(
+        default_factory=dict, alias="REVIEW_PROJECTS"
+    )
+
+    # --- Stats report (optional; empty recipient list means the tick is a no-op) ---
+    #: Numeric Telegram ids that get the periodic who's-slow digest — same shape as
+    #: ADMIN_USER_IDS, not tied to it: a recipient doesn't need to be a bot admin, and
+    #: an admin doesn't automatically get the report.
+    stats_report_recipient_ids: IntList = Field(
+        default_factory=list, alias="STATS_REPORT_RECIPIENT_IDS"
+    )
+    stats_report_interval_days: int = Field(default=7, alias="STATS_REPORT_INTERVAL_DAYS")
+
     # --- Language -------------------------------------------------------------
     # Locale for messages with no single owner: the shared tracker card and the
     # registration hint. DMs use each reviewer's own locale instead — see
@@ -84,7 +121,7 @@ class Settings(BaseSettings):
     def _coerce_time(cls, value: object) -> object:
         return _parse_hhmm(value) if isinstance(value, str) else value
 
-    @field_validator("work_days", "admin_user_ids", mode="before")
+    @field_validator("work_days", "admin_user_ids", "stats_report_recipient_ids", mode="before")
     @classmethod
     def _coerce_int_list(cls, value: object) -> object:
         if isinstance(value, str):
@@ -107,6 +144,10 @@ class Settings(BaseSettings):
     def gitlab_configured(self) -> bool:
         """GitLab polling only runs when both the flag and a token are present."""
         return self.gitlab_enabled and bool(self.gitlab_token)
+
+    @property
+    def stats_report_interval(self) -> timedelta:
+        return timedelta(days=self.stats_report_interval_days)
 
 
 @lru_cache

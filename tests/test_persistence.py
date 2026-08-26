@@ -122,6 +122,84 @@ async def test_nudge_budget_is_not_reset_by_a_restart(tmp_path) -> None:
     await reopened.dispose()
 
 
+async def test_assignment_transitions_are_recorded_and_survive_a_restart(tmp_path) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'reviewpulse.db'}"
+
+    database = Database(url)
+    await database.create_all()
+    async with database.session() as session:
+        review = await review_service.create_or_update_review(
+            session,
+            channel_chat_id=-100,
+            channel_message_id=1,
+            post=parse_post(POST),
+            raw_text=POST,
+            posted_at=msk(27, 9, 0),
+        )
+        await repo.upsert_user(session, 101, username="user1")
+        await review_service.link_user_to_assignments(session, 101, "user1")
+        assignment = await repo.find_assignment(session, review.id, 101)
+
+        from reviewpulse.domain.state import Event
+
+        await review_service.apply_verdict(session, assignment, Event.APPROVE, msk(27, 11, 0))
+    await database.dispose()
+
+    reopened = Database(url)
+    async with reopened.session() as session:
+        rows = await repo.transitions_between(session, msk(27, 0, 0), msk(28, 0, 0))
+        assert len(rows) == 1
+        assert rows[0].event == "approve"
+        assert rows[0].to_state.value == "approved"
+        assert rows[0].at == msk(27, 11, 0)
+        # Relationships resolve after a fresh load, not just within the writing session.
+        assert rows[0].review.id == review.id
+        assert rows[0].assignment.id == assignment.id
+    await reopened.dispose()
+
+
+async def test_announcement_draft_survives_a_restart(tmp_path) -> None:
+    from reviewpulse.parsing.gitlab_url import MergeRequestRef
+
+    url = f"sqlite+aiosqlite:///{tmp_path / 'reviewpulse.db'}"
+
+    database = Database(url)
+    await database.create_all()
+    async with database.session() as session:
+        draft = await repo.create_draft(
+            session,
+            composer_user_id=1,
+            composer_username="author",
+            chat_id=1,
+            project_path="backend/api",
+            product="Demo",
+            title="Title",
+            task_url=None,
+            docs_url=None,
+            merge_requests=[
+                MergeRequestRef(host="git.example.com", project_path="backend/api", iid=1)
+            ],
+            techlead_username="lead",
+            pool_pick_usernames=["p1"],
+        )
+        draft_id = draft.id
+        await repo.set_draft_preview_message(session, draft, 555)
+    await database.dispose()
+
+    reopened = Database(url)
+    async with reopened.session() as session:
+        draft = await repo.get_draft(session, draft_id)
+        assert draft is not None
+        assert draft.preview_message_id == 555
+        assert repo.draft_pool_picks(draft) == ["p1"]
+        assert [ref.iid for ref in repo.draft_merge_requests(draft)] == [1]
+        assert draft.published_at is None
+
+        await repo.mark_draft_published(session, draft)
+        assert draft.published_at is not None
+    await reopened.dispose()
+
+
 def test_naive_timestamps_are_normalised_on_write() -> None:
     """Telegram hands us aware datetimes, but nothing else should be able to poison the
     column with a naive one."""

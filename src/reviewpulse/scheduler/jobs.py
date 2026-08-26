@@ -5,17 +5,21 @@ from __future__ import annotations
 import logging
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from ..config import Settings
 from ..db import repo
+from ..db.models import utcnow
 from ..db.session import Database
 from ..domain.escalation import policy_from_settings
 from ..domain.state import Event
 from ..domain.workhours import calendar_from_settings
 from ..gitlab.client import GitLabClient
+from ..i18n import resolve_locale
 from ..services import gitlab_sync, nudges
-from ..telegram import card
+from ..services import stats as stats_service
+from ..telegram import card, stats_report
 from ..telegram.sender import TelegramNudgeSender, notify_author_changes_requested
 
 logger = logging.getLogger(__name__)
@@ -72,6 +76,38 @@ async def gitlab_tick(bot: Bot, database: Database, settings: Settings) -> None:
         logger.info("gitlab sync applied %s state changes", len(changes))
 
 
+async def stats_report_tick(bot: Bot, database: Database, settings: Settings) -> None:
+    """DM every configured recipient the same digest `/stats` answers on demand.
+
+    A no-op with no recipients configured — mirrors `gitlab_tick`'s
+    `gitlab_configured` gate, just on a plain non-empty-list check instead of a flag.
+    """
+    if not settings.stats_report_recipient_ids:
+        return
+
+    until = utcnow()
+    since = until - settings.stats_report_interval
+    async with database.session() as session:
+        transitions = await repo.transitions_between(session, since, until)
+        report = stats_service.build_report(transitions, since=since, until=until)
+
+        sent = 0
+        for recipient_id in settings.stats_report_recipient_ids:
+            user = await repo.get_user_by_telegram_id(session, recipient_id)
+            locale = resolve_locale(user.locale if user else None, default=settings.default_locale)
+            text = stats_report.render(report, locale, settings.timezone_offset_hours)
+            try:
+                await bot.send_message(
+                    chat_id=recipient_id, text=text, disable_web_page_preview=True
+                )
+                sent += 1
+            except (TelegramForbiddenError, TelegramBadRequest) as exc:
+                logger.warning("could not send stats report to %s: %s", recipient_id, exc)
+
+    total = len(settings.stats_report_recipient_ids)
+    logger.info("sent stats report to %s/%s recipient(s)", sent, total)
+
+
 def build_scheduler(bot: Bot, database: Database, settings: Settings) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -98,5 +134,16 @@ def build_scheduler(bot: Bot, database: Database, settings: Settings) -> AsyncIO
         )
     else:
         logger.info("GitLab sync disabled — running on card buttons only")
+
+    if settings.stats_report_recipient_ids:
+        scheduler.add_job(
+            stats_report_tick,
+            "interval",
+            days=settings.stats_report_interval_days,
+            args=(bot, database, settings),
+            id="stats_report_tick",
+            max_instances=1,
+            coalesce=True,
+        )
 
     return scheduler

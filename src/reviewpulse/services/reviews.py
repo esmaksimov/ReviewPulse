@@ -211,8 +211,12 @@ async def apply_verdict(
     if updated is current:
         return VerdictResult(assignment=assignment, changed=False)
 
+    from_state = assignment.state
     repo.apply_domain(assignment, updated)
     assignment.decided_at = moment
+    await repo.record_transition(
+        session, assignment, from_state=from_state, to_state=updated.state, event=event, at=moment
+    )
 
     review = assignment.review
     closed = await _close_if_enough_approvals(session, review, moment, approvals_cap)

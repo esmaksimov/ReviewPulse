@@ -93,6 +93,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "напоминание в рабочее время.\n\n"
             "Команды:\n"
             "/status — что висит на мне\n"
+            "/announce — собрать пост для канала за меня\n"
             "/link &lt;gitlab-логин&gt; — связать с аккаунтом GitLab\n"
             "/lang &lt;код&gt; — сменить язык бота\n"
             "/mute 2h — не беспокоить\n"
@@ -133,6 +134,45 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Теперь ты ревьювер этого ревью",
         "snoozed_hour": "Не побеспокою 1 ч",
         "snoozed_tomorrow": "Не побеспокою до завтра",
+        "announce_usage": (
+            "Формат: первая строка — название стори/задачи, дальше ссылка(и) на MR, "
+            "и по желанию «Документация: &lt;ссылка&gt;» / «Задача: &lt;ссылка&gt;». "
+            "Продукт и ревьюверов подставлю сам.\n\n"
+            "Пример:\n<code>/announce Обновление контроллера API\n"
+            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
+        ),
+        "announce_no_username": (
+            "У тебя не задан @username в Telegram — без него некого будет "
+            "подставить в «Автор:». Задай ник в настройках Telegram и попробуй снова."
+        ),
+        "announce_no_mr": "Не нашёл ссылку на MR в сообщении.",
+        "announce_project_unconfigured": (
+            "Проект «{project}» не настроен для /announce — попроси добавить его в REVIEW_PROJECTS."
+        ),
+        "announce_preview_intro": "Вот что получится — проверь и опубликуй, если всё верно.",
+        "btn_announce_publish": "✅ Опубликовать",
+        "btn_announce_reroll": "🔁 Другой ревьювер",
+        "btn_announce_cancel": "❌ Отмена",
+        "announce_draft_gone": (
+            "Не нахожу этот черновик — возможно, он уже опубликован или отменён."
+        ),
+        "announce_not_yours": "Это чужой черновик.",
+        "announce_channel_unconfigured": "У бота не настроен CHANNEL_ID — некуда публиковать.",
+        "announce_publish_failed": (
+            "Не смог опубликовать в канал — проверь, что бот админ канала с правом постить."
+        ),
+        "announce_published": "Опубликовано ✅",
+        "announce_published_body": "✅ <b>Опубликовано в канал.</b>",
+        "announce_rerolled": "Выбрал другого ревьювера",
+        "announce_cancelled": "Черновик отменён",
+        "stats_report_title": "📊 <b>Статистика ревью: {since}–{until}</b>",
+        "stats_report_empty": "За этот период данных нет.",
+        "stats_fix_time_header": "<b>Дольше всех чинят правки после ✍️:</b>",
+        "stats_fix_time_empty": "Правок за этот период не было.",
+        "stats_response_time_header": "<b>Дольше всех реагируют на новое ревью:</b>",
+        "stats_response_time_empty": "Новых вердиктов за этот период не было.",
+        "stats_person_line": "• {label} — {avg} в среднем ({count})",
+        "stats_command_no_access": "Эта команда тебе недоступна.",
     },
     "en": {
         "btn_approve": "👍 Approve",
@@ -178,6 +218,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "reminder during working hours.\n\n"
             "Commands:\n"
             "/status — what's waiting on you\n"
+            "/announce — put together the channel post for you\n"
             "/link &lt;gitlab-username&gt; — link your GitLab account\n"
             "/lang &lt;code&gt; — change the bot's language\n"
             "/mute 2h — go quiet\n"
@@ -218,6 +259,49 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "You're now a reviewer on this review",
         "snoozed_hour": "Quiet for 1h",
         "snoozed_tomorrow": "Quiet until tomorrow",
+        "announce_usage": (
+            "Format: first line is the story/task title, then the MR link(s), and "
+            "optionally \"Docs: &lt;url&gt;\" / \"Task: &lt;url&gt;\". I'll fill in the "
+            "product and reviewers myself.\n\n"
+            "Example:\n<code>/announce API controller update\n"
+            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
+        ),
+        "announce_no_username": (
+            "You don't have a @username set in Telegram — without one there's nobody "
+            "to put in \"Author:\". Set a username in Telegram's settings and try again."
+        ),
+        "announce_no_mr": "No merge-request link found in that message.",
+        "announce_project_unconfigured": (
+            'Project "{project}" isn\'t set up for /announce — ask for it to be '
+            "added to REVIEW_PROJECTS."
+        ),
+        "announce_preview_intro": (
+            "Here's what this will look like — check it and publish if it's right."
+        ),
+        "btn_announce_publish": "✅ Publish",
+        "btn_announce_reroll": "🔁 Reroll reviewer",
+        "btn_announce_cancel": "❌ Cancel",
+        "announce_draft_gone": (
+            "Can't find that draft — it may already be published or cancelled."
+        ),
+        "announce_not_yours": "This isn't your draft.",
+        "announce_channel_unconfigured": "The bot has no CHANNEL_ID set — nowhere to publish to.",
+        "announce_publish_failed": (
+            "Couldn't publish to the channel — check that the bot is a channel "
+            "admin with post rights."
+        ),
+        "announce_published": "Published ✅",
+        "announce_published_body": "✅ <b>Published to the channel.</b>",
+        "announce_rerolled": "Drew a different reviewer",
+        "announce_cancelled": "Draft cancelled",
+        "stats_report_title": "📊 <b>Review stats: {since}–{until}</b>",
+        "stats_report_empty": "No data for this period.",
+        "stats_fix_time_header": "<b>Slowest to fix after changes requested:</b>",
+        "stats_fix_time_empty": "No fixes completed this period.",
+        "stats_response_time_header": "<b>Slowest to give a first verdict:</b>",
+        "stats_response_time_empty": "No first verdicts this period.",
+        "stats_person_line": "• {label} — {avg} avg ({count})",
+        "stats_command_no_access": "This command isn't available to you.",
     },
     "es": {
         "btn_approve": "👍 Aprobar",
@@ -263,6 +347,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "recordatorio en horario laboral.\n\n"
             "Comandos:\n"
             "/status — qué tienes pendiente\n"
+            "/announce — preparo la publicación del canal por ti\n"
             "/link &lt;usuario-gitlab&gt; — vincular tu cuenta de GitLab\n"
             "/lang &lt;código&gt; — cambiar el idioma del bot\n"
             "/mute 2h — silenciar\n"
@@ -304,6 +389,49 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Ahora eres revisor de esta revisión",
         "snoozed_hour": "Silenciado 1 h",
         "snoozed_tomorrow": "Silenciado hasta mañana",
+        "announce_usage": (
+            "Formato: la primera línea es el título de la historia/tarea, luego el/los "
+            "enlace(s) al MR, y opcionalmente \"Documentación: &lt;url&gt;\" / "
+            "\"Tarea: &lt;url&gt;\". Yo relleno el producto y los revisores.\n\n"
+            "Ejemplo:\n<code>/announce Actualización del controlador API\n"
+            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
+        ),
+        "announce_no_username": (
+            "No tienes un @username configurado en Telegram — sin uno no hay a quién "
+            "poner en \"Autor:\". Configura un usuario en Telegram e inténtalo de nuevo."
+        ),
+        "announce_no_mr": "No encontré ningún enlace a un MR en ese mensaje.",
+        "announce_project_unconfigured": (
+            "El proyecto «{project}» no está configurado para /announce — pide "
+            "que lo añadan a REVIEW_PROJECTS."
+        ),
+        "announce_preview_intro": "Así quedaría — revísalo y publica si está bien.",
+        "btn_announce_publish": "✅ Publicar",
+        "btn_announce_reroll": "🔁 Otro revisor",
+        "btn_announce_cancel": "❌ Cancelar",
+        "announce_draft_gone": (
+            "No encuentro ese borrador — puede que ya esté publicado o cancelado."
+        ),
+        "announce_not_yours": "Este borrador no es tuyo.",
+        "announce_channel_unconfigured": (
+            "El bot no tiene CHANNEL_ID configurado — no hay dónde publicar."
+        ),
+        "announce_publish_failed": (
+            "No pude publicar en el canal — comprueba que el bot es admin del "
+            "canal con permiso para publicar."
+        ),
+        "announce_published": "Publicado ✅",
+        "announce_published_body": "✅ <b>Publicado en el canal.</b>",
+        "announce_rerolled": "Elegí otro revisor",
+        "announce_cancelled": "Borrador cancelado",
+        "stats_report_title": "📊 <b>Estadísticas de revisión: {since}–{until}</b>",
+        "stats_report_empty": "No hay datos para este período.",
+        "stats_fix_time_header": "<b>Más lentos en corregir tras solicitar cambios:</b>",
+        "stats_fix_time_empty": "No hubo correcciones en este período.",
+        "stats_response_time_header": "<b>Más lentos en dar un primer veredicto:</b>",
+        "stats_response_time_empty": "No hubo primeros veredictos en este período.",
+        "stats_person_line": "• {label} — {avg} de media ({count})",
+        "stats_command_no_access": "Este comando no está disponible para ti.",
     },
     "it": {
         "btn_approve": "👍 Approva",
@@ -350,6 +478,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "promemoria durante l'orario di lavoro.\n\n"
             "Comandi:\n"
             "/status — cosa è in sospeso su di te\n"
+            "/announce — preparo il post del canale al posto tuo\n"
             "/link &lt;utente-gitlab&gt; — collega il tuo account GitLab\n"
             "/lang &lt;codice&gt; — cambia la lingua del bot\n"
             "/mute 2h — silenzia\n"
@@ -390,6 +519,49 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Ora sei revisore di questa review",
         "snoozed_hour": "Silenzioso per 1 h",
         "snoozed_tomorrow": "Silenzioso fino a domani",
+        "announce_usage": (
+            "Formato: la prima riga è il titolo della storia/attività, poi il/i link "
+            "al MR, e facoltativamente \"Documentazione: &lt;url&gt;\" / \"Attività: "
+            "&lt;url&gt;\". Prodotto e revisori li aggiungo io.\n\n"
+            "Esempio:\n<code>/announce Aggiornamento del controller API\n"
+            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
+        ),
+        "announce_no_username": (
+            "Non hai uno @username impostato su Telegram — senza non c'è nessuno da "
+            "mettere in \"Autore:\". Imposta uno username e riprova."
+        ),
+        "announce_no_mr": "Non ho trovato nessun link a un MR in quel messaggio.",
+        "announce_project_unconfigured": (
+            "Il progetto «{project}» non è configurato per /announce — chiedi "
+            "di aggiungerlo a REVIEW_PROJECTS."
+        ),
+        "announce_preview_intro": "Ecco come verrà — controlla e pubblica se va bene.",
+        "btn_announce_publish": "✅ Pubblica",
+        "btn_announce_reroll": "🔁 Altro revisore",
+        "btn_announce_cancel": "❌ Annulla",
+        "announce_draft_gone": (
+            "Non trovo questa bozza — forse è già stata pubblicata o annullata."
+        ),
+        "announce_not_yours": "Questa bozza non è tua.",
+        "announce_channel_unconfigured": (
+            "Il bot non ha un CHANNEL_ID configurato — nessun posto dove pubblicare."
+        ),
+        "announce_publish_failed": (
+            "Non sono riuscito a pubblicare nel canale — controlla che il bot "
+            "sia admin del canale con diritto di postare."
+        ),
+        "announce_published": "Pubblicato ✅",
+        "announce_published_body": "✅ <b>Pubblicato nel canale.</b>",
+        "announce_rerolled": "Scelto un altro revisore",
+        "announce_cancelled": "Bozza annullata",
+        "stats_report_title": "📊 <b>Statistiche review: {since}–{until}</b>",
+        "stats_report_empty": "Nessun dato per questo periodo.",
+        "stats_fix_time_header": "<b>Più lenti a correggere dopo una richiesta di modifiche:</b>",
+        "stats_fix_time_empty": "Nessuna correzione in questo periodo.",
+        "stats_response_time_header": "<b>Più lenti a dare un primo verdetto:</b>",
+        "stats_response_time_empty": "Nessun primo verdetto in questo periodo.",
+        "stats_person_line": "• {label} — {avg} in media ({count})",
+        "stats_command_no_access": "Questo comando non è disponibile per te.",
     },
     "zh": {
         "btn_approve": "👍 通过",
@@ -428,6 +600,7 @@ _STRINGS: dict[str, dict[str, str]] = {
             "现在我知道怎么联系你了——如果有评审落在你身上，我会在工作时间内提醒你。\n\n"
             "命令：\n"
             "/status — 查看当前等待你处理的评审\n"
+            "/announce — 帮你生成频道公告\n"
             "/link &lt;GitLab用户名&gt; — 关联你的 GitLab 账号\n"
             "/lang &lt;语言代码&gt; — 切换机器人语言\n"
             "/mute 2h — 暂停提醒\n"
@@ -465,6 +638,40 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "你现在是这个评审的评审人了",
         "snoozed_hour": "1小时内不再提醒",
         "snoozed_tomorrow": "明天之前不再提醒",
+        "announce_usage": (
+            "格式：第一行是故事/任务标题，然后是 MR 链接，可选加上"
+            "「文档：&lt;链接&gt;」/「任务：&lt;链接&gt;」。产品和评审人由我自动填写。\n\n"
+            "示例：\n<code>/announce API 控制器更新\n"
+            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
+        ),
+        "announce_no_username": (
+            "你在 Telegram 中没有设置 @username——没有它就无法填写「作者：」。"
+            "请在 Telegram 设置中添加用户名后重试。"
+        ),
+        "announce_no_mr": "没有在消息中找到 MR 链接。",
+        "announce_project_unconfigured": (
+            "项目「{project}」未在 REVIEW_PROJECTS 中配置 /announce，请找人添加。"
+        ),
+        "announce_preview_intro": "预览如下——确认无误后发布。",
+        "btn_announce_publish": "✅ 发布",
+        "btn_announce_reroll": "🔁 换一个评审人",
+        "btn_announce_cancel": "❌ 取消",
+        "announce_draft_gone": "找不到这个草稿——可能已经发布或取消了。",
+        "announce_not_yours": "这不是你的草稿。",
+        "announce_channel_unconfigured": "机器人未设置 CHANNEL_ID——没有可发布的频道。",
+        "announce_publish_failed": "发布到频道失败——请确认机器人是频道管理员且有发布权限。",
+        "announce_published": "已发布 ✅",
+        "announce_published_body": "✅ <b>已发布到频道。</b>",
+        "announce_rerolled": "已换一个评审人",
+        "announce_cancelled": "草稿已取消",
+        "stats_report_title": "📊 <b>评审统计：{since}–{until}</b>",
+        "stats_report_empty": "此时间段内没有数据。",
+        "stats_fix_time_header": "<b>要求修改后修复最慢的人：</b>",
+        "stats_fix_time_empty": "此时间段内没有完成的修复。",
+        "stats_response_time_header": "<b>给出首次结论最慢的人：</b>",
+        "stats_response_time_empty": "此时间段内没有首次结论。",
+        "stats_person_line": "• {label} — 平均 {avg}（{count} 次）",
+        "stats_command_no_access": "你没有权限使用此命令。",
     },
 }
 
