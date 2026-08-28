@@ -23,7 +23,7 @@ from ...i18n import resolve_locale
 from ...parsing.post_parser import parse_post
 from ...services import announcements
 from .. import announcement, texts
-from ..keyboards import AnnounceAction
+from ..keyboards import MENU_ANNOUNCE_TEXTS, AnnounceAction
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,22 @@ async def on_announce(
     )
     sent = await message.answer(text, reply_markup=markup, disable_web_page_preview=True)
     await repo.set_draft_preview_message(session, draft, sent.message_id)
+
+
+@router.message(F.text.in_(MENU_ANNOUNCE_TEXTS))
+async def on_announce_button(message: Message, session: AsyncSession, settings: Settings) -> None:
+    """The "Announce" menu button can't carry a title/MR — Telegram sends back only
+    the button's own label as plain text - so this can only ever land on the same
+    usage hint as a bare `/announce`, same as `on_announce`'s no-args branch."""
+    user = message.from_user
+    user_row = await repo.upsert_user(
+        session, user.id, user.username, user.full_name, user.language_code
+    )
+    locale = resolve_locale(user_row.locale, user.language_code, default=settings.default_locale)
+    if not user.username:
+        await message.answer(texts.t(locale, "announce_no_username"))
+        return
+    await message.answer(texts.t(locale, "announce_usage"))
 
 
 @router.callback_query(AnnounceAction.filter())

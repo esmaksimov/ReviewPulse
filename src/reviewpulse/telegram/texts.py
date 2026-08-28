@@ -158,6 +158,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_publish": "✅ Опубликовать",
         "btn_announce_reroll": "🔁 Другой ревьювер",
         "btn_announce_cancel": "❌ Отмена",
+        "btn_menu_status": "📋 Статус",
+        "btn_menu_announce": "📢 Анонс",
+        "btn_menu_stats": "📊 Статистика",
         "announce_draft_gone": (
             "Не нахожу этот черновик — возможно, он уже опубликован или отменён."
         ),
@@ -291,6 +294,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_publish": "✅ Publish",
         "btn_announce_reroll": "🔁 Reroll reviewer",
         "btn_announce_cancel": "❌ Cancel",
+        "btn_menu_status": "📋 Status",
+        "btn_menu_announce": "📢 Announce",
+        "btn_menu_stats": "📊 Stats",
         "announce_draft_gone": (
             "Can't find that draft — it may already be published or cancelled."
         ),
@@ -425,6 +431,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_publish": "✅ Publicar",
         "btn_announce_reroll": "🔁 Otro revisor",
         "btn_announce_cancel": "❌ Cancelar",
+        "btn_menu_status": "📋 Estado",
+        "btn_menu_announce": "📢 Anuncio",
+        "btn_menu_stats": "📊 Estadísticas",
         "announce_draft_gone": (
             "No encuentro ese borrador — puede que ya esté publicado o cancelado."
         ),
@@ -561,6 +570,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_publish": "✅ Pubblica",
         "btn_announce_reroll": "🔁 Altro revisore",
         "btn_announce_cancel": "❌ Annulla",
+        "btn_menu_status": "📋 Stato",
+        "btn_menu_announce": "📢 Annuncio",
+        "btn_menu_stats": "📊 Statistiche",
         "announce_draft_gone": (
             "Non trovo questa bozza — forse è già stata pubblicata o annullata."
         ),
@@ -683,6 +695,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_publish": "✅ 发布",
         "btn_announce_reroll": "🔁 换一个评审人",
         "btn_announce_cancel": "❌ 取消",
+        "btn_menu_status": "📋 状态",
+        "btn_menu_announce": "📢 公告",
+        "btn_menu_stats": "📊 统计",
         "announce_draft_gone": "找不到这个草稿——可能已经发布或取消了。",
         "announce_not_yours": "这不是你的草稿。",
         "announce_channel_unconfigured": "机器人未设置 CHANNEL_ID——没有可发布的频道。",

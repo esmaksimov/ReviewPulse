@@ -7,9 +7,10 @@ button press always tells us *who* pressed it.
 from __future__ import annotations
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
+from ..i18n import SUPPORTED_LOCALES
 from . import texts
 
 
@@ -82,6 +83,30 @@ def announce_preview(
     )
     builder.adjust(2, 1) if has_pool_slot else builder.adjust(2)
     return builder.as_markup()
+
+
+# A reply-keyboard button carries no callback_data — Telegram just sends its label
+# back as plain text — so a tap has to be recognized by text alone. The composer's
+# own locale isn't known until the DB is queried inside the handler, so each set below
+# is every locale's rendering of one button, and the handler matches against the
+# whole set rather than a single hardcoded string.
+MENU_STATUS_TEXTS = frozenset(texts.t(loc, "btn_menu_status") for loc in SUPPORTED_LOCALES)
+MENU_ANNOUNCE_TEXTS = frozenset(texts.t(loc, "btn_menu_announce") for loc in SUPPORTED_LOCALES)
+MENU_STATS_TEXTS = frozenset(texts.t(loc, "btn_menu_stats") for loc in SUPPORTED_LOCALES)
+
+
+def main_menu(locale: str, *, show_stats: bool) -> ReplyKeyboardMarkup:
+    """The persistent bottom keyboard - Status/Announce always, Stats only for the
+    configured recipients (mirrors the access check `on_stats` makes anyway)."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text=texts.t(locale, "btn_menu_status"))
+    builder.button(text=texts.t(locale, "btn_menu_announce"))
+    if show_stats:
+        builder.button(text=texts.t(locale, "btn_menu_stats"))
+        builder.adjust(2, 1)
+    else:
+        builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
 def nudge_actions(locale: str, assignment_id: int, review_url: str | None) -> InlineKeyboardMarkup:
