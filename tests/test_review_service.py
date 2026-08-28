@@ -19,7 +19,7 @@ POST = """Платежи
 
 Доработка connection pool
 
-MR SC: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
+MR API: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
 
 MR Utils: https://git.example.com/backend/packages/utils/-/merge_requests/223
 

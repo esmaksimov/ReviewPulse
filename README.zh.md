@@ -93,7 +93,7 @@ MR，只要明确指定了评审人，也会被跟踪）。两者都没有的帖
 
 连接池优化
 
-MR SC: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
+MR API: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
 
 MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 

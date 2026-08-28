@@ -117,7 +117,7 @@ Pagamenti
 
 Miglioramento del connection pool
 
-MR SC: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
+MR API: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
 
 MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 

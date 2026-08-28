@@ -29,6 +29,19 @@ class AnnounceAction(CallbackData, prefix="an"):
     action: str  # publish | reroll | cancel
 
 
+class AnnounceStep(CallbackData, prefix="aw"):
+    """A control on one step of the step-by-step composer, not on a saved draft —
+    the draft doesn't exist yet, so there is no id to carry."""
+
+    action: str  # skip | cancel
+
+
+class AnnounceProduct(CallbackData, prefix="ap"):
+    #: Index into `services.announcements.available_products`, not the product name:
+    #: callback_data is capped at 64 bytes and these names are non-ASCII.
+    index: int
+
+
 def review_card(
     review_id: int, locale: str, *, is_closed: bool, needs_reviewers: bool
 ) -> InlineKeyboardMarkup:
@@ -107,6 +120,37 @@ def main_menu(locale: str, *, show_stats: bool) -> ReplyKeyboardMarkup:
     else:
         builder.adjust(2)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
+
+
+def announce_step(locale: str, *, can_skip: bool) -> InlineKeyboardMarkup:
+    """Controls under one composer prompt. Cancel is always available; Skip only on
+    the steps that are genuinely optional (the title never is)."""
+    builder = InlineKeyboardBuilder()
+    if can_skip:
+        builder.button(
+            text=texts.t(locale, "btn_announce_skip"),
+            callback_data=AnnounceStep(action="skip"),
+        )
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=AnnounceStep(action="cancel"),
+    )
+    builder.adjust(2 if can_skip else 1)
+    return builder.as_markup()
+
+
+def announce_products(products: list[str], locale: str) -> InlineKeyboardMarkup:
+    """One button per configured product, plus Cancel — the MR-less branch, where
+    there is no repo to infer the product from."""
+    builder = InlineKeyboardBuilder()
+    for index, product in enumerate(products):
+        builder.button(text=product, callback_data=AnnounceProduct(index=index))
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=AnnounceStep(action="cancel"),
+    )
+    builder.adjust(*([2] * ((len(products) + 1) // 2)), 1)
+    return builder.as_markup()
 
 
 def nudge_actions(locale: str, assignment_id: int, review_url: str | None) -> InlineKeyboardMarkup:

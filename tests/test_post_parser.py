@@ -1,7 +1,22 @@
 from dataclasses import dataclass
 
 from reviewpulse.parsing.gitlab_url import find_merge_requests, parse_merge_request_url
-from reviewpulse.parsing.post_parser import parse_post
+from reviewpulse.parsing.post_parser import first_url, parse_post
+
+
+@dataclass
+class FakeLink:
+    """A `text_link` entity: the anchor text is in the message, the URL is not."""
+
+    offset: int
+    length: int
+    url: str
+    type: str = "text_link"
+
+
+def utf16_offset(text: str, needle: str) -> int:
+    """Telegram counts entity offsets in UTF-16 code units, not characters."""
+    return len(text[: text.index(needle)].encode("utf-16-le")) // 2
 
 # How posts actually look in practice: "Ревью:" rather than the template's
 # "Ревьювер:", several MRs on separate labelled lines, and a task-tracker link that
@@ -10,7 +25,7 @@ REAL_POST = """Платежи
 
 Доработка connection pool
 
-MR SC: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
+MR API: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
 
 MR Utils: https://git.example.com/backend/packages/utils/-/merge_requests/223
 
@@ -171,6 +186,87 @@ def test_gitlab_and_github_links_are_both_found_in_the_same_post() -> None:
 
 def test_a_plain_github_repo_link_without_pull_is_not_a_merge_request() -> None:
     assert find_merge_requests("https://github.com/example-org/example-repo") == []
+
+
+def test_a_docs_link_hidden_behind_anchor_text_is_still_found() -> None:
+    """"Документация: Confluence" where "Confluence" is a hyperlink carries no
+    https:// in the message text at all — the target lives on the entity. Reading
+    only the visible text is how a docs link silently vanished from a published post."""
+    text = "Продукт\nСоздание новых методов\n\nДокументация: Confluence -> Методы"
+    post = parse_post(
+        text,
+        [FakeLink(utf16_offset(text, "Confluence"), 10, "https://wiki.example.com/pages/1")],
+    )
+    assert post.docs_url == "https://wiki.example.com/pages/1"
+
+
+def test_a_written_out_url_still_wins_over_a_hyperlink_on_the_same_line() -> None:
+    text = "Продукт\nФикс\n\nДокументация: https://wiki.example.com/real тут"
+    post = parse_post(
+        text, [FakeLink(utf16_offset(text, "тут"), 3, "https://wiki.example.com/decoy")]
+    )
+    assert post.docs_url == "https://wiki.example.com/real"
+
+
+def test_a_hyperlink_on_another_line_does_not_leak_into_the_docs_field() -> None:
+    text = "Продукт\nсмотри тут\n\nДокументация: пока нет"
+    post = parse_post(
+        text, [FakeLink(utf16_offset(text, "тут"), 3, "https://wiki.example.com/elsewhere")]
+    )
+    assert post.docs_url is None
+
+
+def test_a_merge_request_linked_only_behind_anchor_text_is_found() -> None:
+    text = "Продукт\nФикс\n\nMR: вот он"
+    post = parse_post(
+        text,
+        [
+            FakeLink(
+                utf16_offset(text, "вот"),
+                3,
+                "https://git.example.com/backend/api/-/merge_requests/7",
+            )
+        ],
+    )
+    assert [(mr.project_path, mr.iid) for mr in post.merge_requests] == [("backend/api", 7)]
+
+
+def test_the_same_mr_linked_twice_raw_and_hidden_counts_once() -> None:
+    url = "https://git.example.com/backend/api/-/merge_requests/7"
+    text = f"Продукт\nФикс\n\nMR: {url}\nдубль"
+    post = parse_post(text, [FakeLink(utf16_offset(text, "дубль"), 5, url)])
+    assert len(post.merge_requests) == 1
+
+
+def test_entity_offsets_are_read_as_utf16_units_not_characters() -> None:
+    """An emoji is one Python character but two UTF-16 units. Counting characters
+    would put the link on the wrong line and lose it."""
+    text = "Продукт 🎉\nФикс\n\nДокументация: тут"
+    post = parse_post(
+        text, [FakeLink(utf16_offset(text, "тут"), 3, "https://wiki.example.com/pages/2")]
+    )
+    assert post.docs_url == "https://wiki.example.com/pages/2"
+
+
+def test_entity_offsets_are_shifted_for_a_command_slice() -> None:
+    """`/announce <args>` parses only the args, but Telegram's offsets still count
+    from the start of the whole message, command word included."""
+    full = "/announce Фикс\n\nДокументация: тут"
+    prefix = "/announce "
+    post = parse_post(
+        full[len(prefix) :],
+        [FakeLink(utf16_offset(full, "тут"), 3, "https://wiki.example.com/pages/3")],
+        entity_offset=len(prefix),
+    )
+    assert post.docs_url == "https://wiki.example.com/pages/3"
+
+
+def test_first_url_reads_a_written_out_url_then_falls_back_to_a_hyperlink() -> None:
+    """For the step-by-step composer, where a whole message is one answer and there
+    is no label to anchor on."""
+    assert first_url("см. https://a.example.com/1.") == "https://a.example.com/1"
+    assert first_url("тут", [FakeLink(0, 3, "https://b.example.com/2")]) == "https://b.example.com/2"
+    assert first_url("ничего не приложил") is None
 
 
 def test_text_mentions_supply_the_user_id_for_handleless_reviewers() -> None:

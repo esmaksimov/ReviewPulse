@@ -134,13 +134,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Теперь ты ревьювер этого ревью",
         "snoozed_hour": "Не побеспокою 1 ч",
         "snoozed_tomorrow": "Не побеспокою до завтра",
-        "announce_usage": (
-            "Формат: первая строка — название стори/задачи, дальше ссылка(и) на MR, "
-            "и по желанию «Документация: &lt;ссылка&gt;» / «Задача: &lt;ссылка&gt;». "
-            "Продукт и ревьюверов подставлю сам.\n\n"
-            "Пример:\n<code>/announce Обновление контроллера API\n"
-            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
-        ),
         "announce_no_username": (
             "У тебя не задан @username в Telegram — без него некого будет "
             "подставить в «Автор:». Задай ник в настройках Telegram и попробуй снова."
@@ -161,6 +154,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_status": "📋 Статус",
         "btn_menu_announce": "📢 Анонс",
         "btn_menu_stats": "📊 Статистика",
+        "btn_announce_skip": "⏭ Пропустить",
+        "announce_step_title": "Как называется задача? Пришли одной строкой.",
+        "announce_step_merge_requests": (
+            "Ссылки на MR/PR — можно несколько, каждая с новой строки. "
+            "Если их нет, жми «Пропустить»."
+        ),
+        "announce_step_product": "К какому продукту относится задача?",
+        "announce_step_docs": "Ссылка на документацию? Или «Пропустить».",
+        "announce_step_description": (
+            "Тогда опиши задачу в двух словах — это уйдёт в пост строкой «Описание:». "
+            "Или «Пропустить»."
+        ),
+        "announce_step_task": "Ссылка на задачу? Или «Пропустить».",
+        "announce_step_no_mr": (
+            "Не вижу тут ссылок на MR/PR. Пришли ещё раз или нажми «Пропустить»."
+        ),
+        "announce_step_no_url": "Не вижу тут ссылки. Пришли ещё раз или нажми «Пропустить».",
+        "announce_nothing_provided": (
+            "Пост не из чего собрать: ни MR, ни документации, ни задачи, ни описания. "
+            "Начни заново — /announce."
+        ),
+        "announce_no_products": (
+            "Ни один проект не настроен для /announce — попроси добавить их в REVIEW_PROJECTS."
+        ),
         "announce_draft_gone": (
             "Не нахожу этот черновик — возможно, он уже опубликован или отменён."
         ),
@@ -267,13 +284,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "You're now a reviewer on this review",
         "snoozed_hour": "Quiet for 1h",
         "snoozed_tomorrow": "Quiet until tomorrow",
-        "announce_usage": (
-            "Format: first line is the story/task title, then the MR link(s), and "
-            "optionally \"Docs: &lt;url&gt;\" / \"Task: &lt;url&gt;\". I'll fill in the "
-            "product and reviewers myself.\n\n"
-            "Example:\n<code>/announce API controller update\n"
-            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
-        ),
         "announce_no_username": (
             "You don't have a @username set in Telegram — without one there's nobody "
             "to put in \"Author:\". Set a username in Telegram's settings and try again."
@@ -297,6 +307,27 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_status": "📋 Status",
         "btn_menu_announce": "📢 Announce",
         "btn_menu_stats": "📊 Stats",
+        "btn_announce_skip": "⏭ Skip",
+        "announce_step_title": "What is the task called? One line is enough.",
+        "announce_step_merge_requests": (
+            "MR/PR links — several are fine, one per line. Tap Skip if there aren't any."
+        ),
+        "announce_step_product": "Which product is this for?",
+        "announce_step_docs": "A docs link? Or tap Skip.",
+        "announce_step_description": (
+            "Then describe it in a sentence — it goes into the post as a "
+            "«Description:» line. Or tap Skip."
+        ),
+        "announce_step_task": "A task link? Or tap Skip.",
+        "announce_step_no_mr": "No MR/PR links in there. Send them again, or tap Skip.",
+        "announce_step_no_url": "No link in there. Send it again, or tap Skip.",
+        "announce_nothing_provided": (
+            "There's nothing to build a post from: no MR, no docs, no task, no "
+            "description. Start again with /announce."
+        ),
+        "announce_no_products": (
+            "No project is set up for /announce — ask for them to be added to REVIEW_PROJECTS."
+        ),
         "announce_draft_gone": (
             "Can't find that draft — it may already be published or cancelled."
         ),
@@ -405,13 +436,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Ahora eres revisor de esta revisión",
         "snoozed_hour": "Silenciado 1 h",
         "snoozed_tomorrow": "Silenciado hasta mañana",
-        "announce_usage": (
-            "Formato: la primera línea es el título de la historia/tarea, luego el/los "
-            "enlace(s) al MR, y opcionalmente \"Documentación: &lt;url&gt;\" / "
-            "\"Tarea: &lt;url&gt;\". Yo relleno el producto y los revisores.\n\n"
-            "Ejemplo:\n<code>/announce Actualización del controlador API\n"
-            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
-        ),
         "announce_no_username": (
             "No tienes un @username configurado en Telegram — sin uno no hay a quién "
             "poner en \"Autor:\". Configura un usuario en Telegram e inténtalo de nuevo."
@@ -434,6 +458,29 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_status": "📋 Estado",
         "btn_menu_announce": "📢 Anuncio",
         "btn_menu_stats": "📊 Estadísticas",
+        "btn_announce_skip": "⏭ Omitir",
+        "announce_step_title": "¿Cómo se llama la tarea? Con una línea basta.",
+        "announce_step_merge_requests": (
+            "Enlaces de MR/PR — pueden ser varios, uno por línea. "
+            "Pulsa Omitir si no hay ninguno."
+        ),
+        "announce_step_product": "¿A qué producto pertenece?",
+        "announce_step_docs": "¿Un enlace a la documentación? O pulsa Omitir.",
+        "announce_step_description": (
+            "Entonces descríbela en una frase — irá al post como línea "
+            "«Descripción:». O pulsa Omitir."
+        ),
+        "announce_step_task": "¿Un enlace a la tarea? O pulsa Omitir.",
+        "announce_step_no_mr": "No veo enlaces de MR/PR. Envíalos de nuevo o pulsa Omitir.",
+        "announce_step_no_url": "No veo ningún enlace. Envíalo de nuevo o pulsa Omitir.",
+        "announce_nothing_provided": (
+            "No hay con qué armar el post: ni MR, ni documentación, ni tarea, ni "
+            "descripción. Empieza de nuevo con /announce."
+        ),
+        "announce_no_products": (
+            "Ningún proyecto está configurado para /announce — pide que los añadan "
+            "a REVIEW_PROJECTS."
+        ),
         "announce_draft_gone": (
             "No encuentro ese borrador — puede que ya esté publicado o cancelado."
         ),
@@ -544,13 +591,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "Ora sei revisore di questa review",
         "snoozed_hour": "Silenzioso per 1 h",
         "snoozed_tomorrow": "Silenzioso fino a domani",
-        "announce_usage": (
-            "Formato: la prima riga è il titolo della storia/attività, poi il/i link "
-            "al MR, e facoltativamente \"Documentazione: &lt;url&gt;\" / \"Attività: "
-            "&lt;url&gt;\". Prodotto e revisori li aggiungo io.\n\n"
-            "Esempio:\n<code>/announce Aggiornamento del controller API\n"
-            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
-        ),
         "announce_no_username": (
             "Non hai uno @username impostato su Telegram — senza non c'è nessuno da "
             "mettere in \"Autore:\". Imposta uno username e riprova."
@@ -573,6 +613,29 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_status": "📋 Stato",
         "btn_menu_announce": "📢 Annuncio",
         "btn_menu_stats": "📊 Statistiche",
+        "btn_announce_skip": "⏭ Salta",
+        "announce_step_title": "Come si chiama l'attività? Basta una riga.",
+        "announce_step_merge_requests": (
+            "Link MR/PR — possono essere più di uno, uno per riga. "
+            "Premi Salta se non ce ne sono."
+        ),
+        "announce_step_product": "A quale prodotto appartiene?",
+        "announce_step_docs": "Un link alla documentazione? Oppure premi Salta.",
+        "announce_step_description": (
+            "Allora descrivila in una frase — finirà nel post come riga "
+            "«Descrizione:». Oppure premi Salta."
+        ),
+        "announce_step_task": "Un link all'attività? Oppure premi Salta.",
+        "announce_step_no_mr": "Non vedo link MR/PR. Inviali di nuovo o premi Salta.",
+        "announce_step_no_url": "Non vedo nessun link. Invialo di nuovo o premi Salta.",
+        "announce_nothing_provided": (
+            "Non c'è nulla con cui creare il post: né MR, né documentazione, né "
+            "attività, né descrizione. Ricomincia con /announce."
+        ),
+        "announce_no_products": (
+            "Nessun progetto è configurato per /announce — chiedi di aggiungerli "
+            "a REVIEW_PROJECTS."
+        ),
         "announce_draft_gone": (
             "Non trovo questa bozza — forse è già stata pubblicata o annullata."
         ),
@@ -672,12 +735,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "answer_now_reviewer": "你现在是这个评审的评审人了",
         "snoozed_hour": "1小时内不再提醒",
         "snoozed_tomorrow": "明天之前不再提醒",
-        "announce_usage": (
-            "格式：第一行是故事/任务标题，然后是 MR 链接，可选加上"
-            "「文档：&lt;链接&gt;」/「任务：&lt;链接&gt;」。产品和评审人由我自动填写。\n\n"
-            "示例：\n<code>/announce API 控制器更新\n"
-            "https://gitlab.example.com/backend/api/-/merge_requests/1112</code>"
-        ),
         "announce_no_username": (
             "你在 Telegram 中没有设置 @username——没有它就无法填写「作者：」。"
             "请在 Telegram 设置中添加用户名后重试。"
@@ -698,6 +755,23 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_status": "📋 状态",
         "btn_menu_announce": "📢 公告",
         "btn_menu_stats": "📊 统计",
+        "btn_announce_skip": "⏭ 跳过",
+        "announce_step_title": "任务叫什么？一行就够。",
+        "announce_step_merge_requests": "MR/PR 链接——可以多个，每行一个。没有就点「跳过」。",
+        "announce_step_product": "属于哪个产品？",
+        "announce_step_docs": "文档链接？或者点「跳过」。",
+        "announce_step_description": (
+            "那就用一句话描述一下——会作为「描述：」写进帖子。或者点「跳过」。"
+        ),
+        "announce_step_task": "任务链接？或者点「跳过」。",
+        "announce_step_no_mr": "没看到 MR/PR 链接。请重新发送，或点「跳过」。",
+        "announce_step_no_url": "没看到链接。请重新发送，或点「跳过」。",
+        "announce_nothing_provided": (
+            "没有可用来生成帖子的内容：没有 MR、文档、任务，也没有描述。请用 /announce 重新开始。"
+        ),
+        "announce_no_products": (
+            "没有任何项目配置了 /announce——请让管理员把它们加到 REVIEW_PROJECTS。"
+        ),
         "announce_draft_gone": "找不到这个草稿——可能已经发布或取消了。",
         "announce_not_yours": "这不是你的草稿。",
         "announce_channel_unconfigured": "机器人未设置 CHANNEL_ID——没有可发布的频道。",

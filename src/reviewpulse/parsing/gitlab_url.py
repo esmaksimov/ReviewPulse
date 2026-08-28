@@ -75,7 +75,7 @@ def find_merge_requests(text: str) -> list[MergeRequestRef]:
     """All distinct MR/PR links in a post, GitLab and GitHub alike, in order of
     appearance.
 
-    Posts routinely carry more than one ("MR SC:" plus "MR Utils:"), and a review is
+    Posts routinely carry more than one ("MR API:" plus "MR Utils:"), and a review is
     only "fixed" once every one of them is clean — so we keep them all.
     """
     seen: dict[tuple[str, str, int], MergeRequestRef] = {}

@@ -12,6 +12,7 @@ import pytest
 
 from reviewpulse.config import ProjectReviewConfig, Settings
 from reviewpulse.db import repo
+from reviewpulse.db.models import AnnouncementDraft
 from reviewpulse.parsing import post_parser
 from reviewpulse.parsing.gitlab_url import MergeRequestRef
 from reviewpulse.parsing.post_parser import parse_post
@@ -174,7 +175,7 @@ async def test_create_draft_persists_the_resolved_config(session) -> None:
 # --- multiple MRs in one draft ---------------------------------------------------
 #
 # Real posts routinely name several MRs across several repos in one announcement
-# (`MR SC:` / `MR Utils:` / ... on separate lines, no label needed since the parser
+# (`MR API:` / `MR Utils:` / ... on separate lines, no label needed since the parser
 # finds every one by URL shape regardless). That's fine as long as every repo
 # named is configured identically in REVIEW_PROJECTS — and rejected outright, not
 # guessed at, the moment two of them disagree.
@@ -382,6 +383,137 @@ def test_render_labels_match_the_parsers_own_regexes(locale: str) -> None:
     assert post_parser._AUTHOR_LABEL.match(f"{announcement._AUTHOR_LABEL_WORD[locale]}: @x")
     assert post_parser._DOCS_LABEL.match(f"{announcement._DOCS_LABEL_WORD[locale]}: http://x")
     assert post_parser._TASK_LABEL.match(f"{announcement._TASK_LABEL_WORD[locale]}: http://x")
+    # No compiled _DESCRIPTION_LABEL: the description line is never read back out,
+    # it just has to be recognized as metadata so it can't be mistaken for the title.
+    assert post_parser._ANY_LABEL.match(f"{announcement._DESCRIPTION_LABEL_WORD[locale]}: что-то")
+
+
+# --- announcements with no merge request at all ----------------------------------
+#
+# An SQL-only change or a docs update goes through review without ever touching a
+# merge request. The ingestion side has always tracked such posts (a deliberate
+# reviewer line is enough), but /announce used to refuse them: with no MR there is no
+# repo to resolve the product from. The composer picks the product instead.
+
+
+def test_available_products_lists_each_product_once_in_order() -> None:
+    settings = make_settings(
+        **{
+            "backend/api": {"product": "Demo A"},
+            "backend/utils": {"product": "Demo A"},
+            "backend/other": {"product": "Demo B"},
+        }
+    )
+    assert announcements.available_products(settings) == ["Demo A", "Demo B"]
+
+
+def test_available_products_is_empty_when_nothing_is_configured() -> None:
+    assert announcements.available_products(make_settings()) == []
+
+
+def test_project_for_product_returns_a_representative_configured_path() -> None:
+    settings = make_settings(
+        **{"backend/api": {"product": "Demo A"}, "backend/other": {"product": "Demo B"}}
+    )
+    assert announcements.project_for_product(settings, "Demo B") == "backend/other"
+    assert announcements.project_for_product(settings, "Nothing") is None
+
+
+async def test_create_draft_without_an_mr_uses_the_product_the_composer_picked(session) -> None:
+    settings = make_settings(
+        **{"backend/api": {"product": "Demo Product", "techlead": "lead", "pool": ["pool1"]}}
+    )
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post("Убрать некорректные данные"),
+        settings=settings,
+        product="Demo Product",
+        description="Только SQL, кода нет",
+    )
+
+    assert draft.product == "Demo Product"
+    assert draft.title == "Убрать некорректные данные"
+    assert draft.description == "Только SQL, кода нет"
+    assert repo.draft_merge_requests(draft) == []
+    # A real path is stored so reroll's config lookup stays a plain dict hit.
+    assert draft.project_path == "backend/api"
+    assert draft.techlead_username == "lead"
+
+
+async def test_create_draft_still_refuses_when_neither_an_mr_nor_a_product_is_given(
+    session,
+) -> None:
+    settings = make_settings(**{"backend/api": {"product": "Demo Product"}})
+    with pytest.raises(announcements.NoMergeRequestFound):
+        await announcements.create_draft(
+            session,
+            composer_user_id=1,
+            composer_username="author",
+            chat_id=1,
+            parsed=parse_post("Просто текст"),
+            settings=settings,
+        )
+
+
+async def test_create_draft_rejects_a_product_no_project_carries(session) -> None:
+    settings = make_settings(**{"backend/api": {"product": "Demo Product"}})
+    with pytest.raises(announcements.ProductNotConfigured) as exc_info:
+        await announcements.create_draft(
+            session,
+            composer_user_id=1,
+            composer_username="author",
+            chat_id=1,
+            parsed=parse_post("Просто текст"),
+            settings=settings,
+            product="Nothing Configured",
+        )
+    assert exc_info.value.product == "Nothing Configured"
+
+
+async def test_an_mr_less_generated_post_is_still_tracked_as_a_review(session) -> None:
+    """The reason allowing it is safe: the rendered post still carries a deliberate
+    reviewer line, which is exactly what `looks_like_review` accepts without an MR."""
+    settings = make_settings(
+        **{"backend/api": {"product": "Demo Product", "techlead": "lead", "pool": ["pool1"]}}
+    )
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post("Убрать некорректные данные"),
+        settings=settings,
+        product="Demo Product",
+        description="Только SQL, кода нет",
+    )
+
+    rendered = announcement.render(draft, "ru")
+    reparsed = parse_post(rendered)
+
+    assert reparsed.merge_requests == []
+    assert reparsed.product == "Demo Product"
+    assert reparsed.title == "Убрать некорректные данные", "the Описание line is not the title"
+    assert "Описание: Только SQL, кода нет" in rendered
+    assert reparsed.has_labelled_reviewers
+    assert reparsed.looks_like_review
+
+
+def test_render_omits_the_separator_when_there_is_nothing_between_title_and_reviewers() -> None:
+    """Title-only drafts are legal; the post must not open with a doubled blank line."""
+    draft = AnnouncementDraft(
+        composer_username="author",
+        product="Demo Product",
+        title="Убрать некорректные данные",
+        merge_requests_json="[]",
+        techlead_username="lead",
+        pool_pick_usernames_json='["pool1"]',
+    )
+    rendered = announcement.render(draft, "ru")
+    assert "\n\n\n" not in rendered
+    assert rendered.splitlines()[:2] == ["Demo Product", "Убрать некорректные данные"]
 
 
 async def test_generated_post_ingests_the_same_way_a_human_post_would(session) -> None:

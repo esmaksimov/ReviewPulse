@@ -113,7 +113,7 @@ Payments
 
 Connection pool rework
 
-MR SC: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
+MR API: https://gitlab.example.com/backend/services/api_controller/-/merge_requests/1112
 
 MR Utils: https://gitlab.example.com/backend/packages/utils/-/merge_requests/223
 
@@ -150,9 +150,25 @@ silent — the card ships with a "🙋 I'm a reviewer" button instead.
 
 ### Generating the post for you
 
-Instead of typing the whole thing by hand, DM the bot `/announce` with a title and the
-MR link(s) — it fills in the product name and picks reviewers itself, then posts the
-result to the channel:
+Instead of typing the whole thing by hand, let the bot compose it: it fills in the
+product name and picks reviewers itself, then posts the result to the channel.
+
+Tap **📢 Announce** in the bot's menu (or send a bare `/announce`) and it asks for one
+thing per message — title, then MR/PR links, docs, task — with a **⏭ Skip** button on
+every optional one. Answering each in its own message is also what makes pasted
+hyperlinks work: `Docs: Confluence` where *Confluence* is a link carries no URL in the
+message text at all, and reading only the text used to publish a post with the docs
+line silently missing.
+
+Two branches follow from what you skip:
+
+- **No MR/PR at all** — an SQL-only fix or a docs change — and the bot asks which
+  product it belongs to, since there is no repo to infer one from. The post is still
+  tracked: a deliberate reviewer line is enough, no merge request required.
+- **No docs link** and it offers a free-text **Description** instead, which goes out
+  as the template's `Description:` line.
+
+If you already have the text on your clipboard, the one-shot form still works:
 
 ```
 /announce Connection pool rework
@@ -160,7 +176,7 @@ https://gitlab.example.com/example/demo-project/-/merge_requests/1112
 Docs: https://wiki.example.com/pages/1
 ```
 
-The bot replies with a preview and three buttons — **Publish**, **🔁 Reroll
+Either way the bot replies with a preview and three buttons — **Publish**, **🔁 Reroll
 reviewer**, **Cancel** — so you can redraw the pick before it goes out (the reviewer
 it drew happens to be on vacation, say) or back out entirely. Once published, the post
 goes through the exact same parsing/tracking path as one typed by hand — nothing about
@@ -407,7 +423,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 197 tests
+poetry run pytest                   # 240 tests
 poetry run ruff check src tests
 ```
 
@@ -477,5 +493,8 @@ migrations/              Alembic
   draft naming MRs from several repos is fine as long as their `REVIEW_PROJECTS`
   entries match exactly (product/techlead/pool/reviewer_count); if they don't, the
   draft is rejected with the conflicting project names rather than picking one.
+- **A half-finished `/announce` doesn't survive a restart** — the step-by-step
+  composer keeps its answers in memory, so a redeploy mid-compose means starting
+  over. The finished draft is a DB row and is unaffected.
 - **Stats only cover transitions recorded after the feature shipped** — there's no way
   to backfill reviews that closed before that history table existed.

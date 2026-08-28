@@ -245,11 +245,17 @@ class AnnouncementDraft(Base, TimestampMixin):
     chat_id: Mapped[int] = mapped_column(BigInteger)
     preview_message_id: Mapped[int | None] = mapped_column(Integer)
 
+    #: Always a real configured path, even for a draft that names no MR at all: the
+    #: composer picks a product instead and `services.announcements` stores one
+    #: project carrying it, so the config lookup on reroll stays a plain dict hit.
     project_path: Mapped[str] = mapped_column(String(512))
     product: Mapped[str] = mapped_column(String(256))
     title: Mapped[str | None] = mapped_column(String(512))
     task_url: Mapped[str | None] = mapped_column(Text)
     docs_url: Mapped[str | None] = mapped_column(Text)
+    #: The template's "Описание:" line — what a change is about when it has no docs
+    #: page to link to (an SQL-only fix, say).
+    description: Mapped[str | None] = mapped_column(Text)
     #: JSON list of {host, project_path, iid}.
     merge_requests_json: Mapped[str] = mapped_column(Text, default="[]")
 
