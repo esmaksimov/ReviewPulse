@@ -148,6 +148,70 @@ Los enlaces al gestor de tareas o a la wiki nunca se confunden con un MR. El tex
 mezclado en la línea de revisores no oculta los usuarios. Si no se pudo identificar a
 ningún revisor, el bot no se queda callado: la tarjeta trae un botón "🙋 Soy revisor".
 
+### Generar la publicación por ti
+
+En vez de escribir todo a mano, deja que lo redacte el bot: rellena el nombre del
+producto y elige a los revisores por su cuenta, y luego publica el resultado en el
+canal.
+
+Pulsa **📢 Anuncio** en el menú del bot (o envía un simple `/announce`) y te va a
+preguntar una cosa por mensaje — título, luego enlaces a MR/PR, documentación, tarea —
+con un botón **⏭ Omitir** en cada paso que sea opcional. Que cada respuesta llegue en
+su propio mensaje es también lo que hace que funcionen los enlaces pegados como
+hipervínculo: `Documentación: Confluence`, donde *Confluence* es un enlace, no lleva
+ninguna URL en el texto del mensaje — y leer solo el texto visible es justo lo que
+hacía que se publicara un post con la línea de documentación en blanco, sin que nadie
+se diera cuenta.
+
+De lo que omitas se derivan dos caminos:
+
+- **Sin ningún MR/PR** — un arreglo solo de SQL, o un cambio de documentación — y el
+  bot pregunta a qué producto pertenece, porque no hay repositorio del que deducirlo.
+  La publicación se sigue rastreando igual: basta con una línea de revisores puesta a
+  propósito, no hace falta ningún merge request.
+- **Sin enlace a documentación** y el bot ofrece en su lugar una **Descripción** en
+  texto libre, que sale como la línea `Descripción:` de la plantilla.
+
+Si ya tienes el texto listo en el portapapeles, la forma de un solo mensaje sigue
+funcionando:
+
+```
+/announce Mejora del connection pool
+https://gitlab.example.com/example/demo-project/-/merge_requests/1112
+Documentación: https://wiki.example.com/pages/1
+```
+
+En cualquiera de los dos casos el bot responde con una vista previa y tres botones —
+**Publicar**, **🔁 Otro revisor**, **Cancelar** — para que puedas volver a sortear al
+revisor antes de publicar (si el que salió está de vacaciones, por ejemplo) o cancelar
+del todo. Una vez publicada, la publicación sigue exactamente el mismo camino de
+análisis y seguimiento que una escrita a mano — no recibe ningún trato especial.
+
+La selección de revisores se configura por entorno, una entrada por proyecto de
+GitLab, con la misma clave `project_path` que ya lleva un enlace a un MR:
+
+```dotenv
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+```
+
+- `product` — se muestra en la publicación generada.
+- `techlead` *(opcional)* — se incluye siempre, salvo que sea quien está ejecutando
+  `/announce`.
+- `pool` — candidatos para el resto de plazas, elegidos al azar, excluyendo a quien
+  redacta.
+- `reviewer_count` *(opcional, por defecto 2)* — total de revisores en la publicación,
+  el techlead incluido.
+
+La línea de autor se resuelve gratis aquí — a diferencia de una publicación escrita a
+mano, la identidad de quien redacta ya se conoce por el mensaje privado, sin
+necesidad de ninguna etiqueta opcional.
+
+Nombrar varios enlaces a MR trae varios repositorios de una vez — está bien siempre
+que todos estén configurados de forma idéntica en `REVIEW_PROJECTS`. Si dos
+repositorios nombrados no coinciden (producto, techlead o pool distintos), el
+borrador se rechaza de entrada con los nombres de los proyectos en conflicto, en vez
+de elegir uno en silencio.
+
 La tarjeta que aparece en el hilo de comentarios bajo la publicación:
 
 ```
@@ -304,6 +368,28 @@ para que un hilo reabierto por otra persona no revoque un 👍 en silencio.
 
 ---
 
+## Estadísticas del equipo
+
+Un resumen periódico por mensaje privado con dos números, desglosados por persona:
+cuánto tardó un autor en atender un "se piden cambios" desde que llegó, y cuánto
+tardó un revisor en dar su primer veredicto. Los promedios más lentos aparecen
+primero.
+
+No se envía nada a menos que haya al menos un destinatario configurado:
+
+```dotenv
+STATS_REPORT_RECIPIENT_IDS=123456789,987654321
+STATS_REPORT_INTERVAL_DAYS=7
+```
+
+El mismo resumen está disponible bajo demanda con `/stats` — restringido a la misma
+lista de destinatarios, ya que son datos de tiempos por persona.
+
+Solo cuenta a partir del momento en que empezó a registrarse este historial — no hay
+forma de rellenar hacia atrás revisiones que se cerraron antes de que existiera.
+
+---
+
 ## Idiomas
 
 Soportados: ruso, inglés, español, italiano, chino (`ru`, `en`, `es`, `it`, `zh`).
@@ -336,9 +422,11 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 |---|---|
 | `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
 | `/status` | qué tienes pendiente ahora mismo, con plazos y un enlace a cada publicación |
+| `/announce` | redacta la publicación del canal por ti — ver [Generar la publicación por ti](#generar-la-publicación-por-ti) |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
 | `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
 | `/mute 2h`, `/unmute` | silenciar / volver a avisar |
+| `/stats` | el resumen de estadísticas del equipo, bajo demanda — solo destinatarios configurados, ver [Estadísticas del equipo](#estadísticas-del-equipo) |
 
 ---
 
@@ -350,7 +438,7 @@ poetry install
 cp .env.example .env                # completa BOT_TOKEN
 poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
 
-poetry run pytest                   # 122 pruebas
+poetry run pytest                   # 240 pruebas
 poetry run ruff check src tests
 ```
 
@@ -395,8 +483,8 @@ src/reviewpulse/
   parsing/                 análisis de publicaciones y extracción de enlaces a MR
   gitlab/                  cliente REST y análisis de hilos
   db/                      modelos, sesión, consultas
-  services/                pegamento entre dominio y BD: revisiones, avisos, sincronización con GitLab
-  telegram/                 bot, handlers, tarjeta, textos traducidos
+  services/                pegamento entre dominio y BD: revisiones, avisos, sincronización con GitLab, anuncios, estadísticas
+  telegram/                 bot, handlers, tarjeta, renderizado de anuncios y estadísticas, textos traducidos
   scheduler/                el tick de avisos y el tick de sincronización
 migrations/                Alembic
 ```
@@ -417,3 +505,15 @@ migrations/                Alembic
 - **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por
   campo (ver [Cómo se ve](#cómo-se-ve)) — una etiqueta fuera de esa lista, en
   cualquier idioma, cae en la heurística posicional en vez de leerse directamente.
+- **`/announce` exige que todos los proyectos referenciados estén configurados de
+  forma idéntica** — un borrador que nombra MRs de varios repositorios está bien
+  siempre que sus entradas en `REVIEW_PROJECTS` coincidan exactamente
+  (producto/techlead/pool/reviewer_count); si no coinciden, el borrador se rechaza
+  con los nombres de los proyectos en conflicto en vez de elegir uno.
+- **Un `/announce` a medio terminar no sobrevive a un reinicio** — el asistente
+  paso a paso guarda las respuestas en memoria, así que un redeploy a mitad de la
+  conversación significa empezar de nuevo. El borrador ya terminado es una fila en
+  la BD y no se ve afectado.
+- **Las estadísticas solo cubren transiciones registradas desde que se lanzó la
+  función** — no hay forma de rellenar hacia atrás revisiones que se cerraron antes
+  de que existiera esa tabla de historial.

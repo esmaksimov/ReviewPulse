@@ -153,6 +153,67 @@ mescolato nella riga dei revisori non nasconde gli username. Se non è stato pos
 identificare i revisori, il bot non resta in silenzio: la card arriva con un pulsante
 "🙋 Sono un revisore".
 
+### Generare il post per te
+
+Invece di scrivere tutto a mano, lascia che sia il bot a comporlo: compila da solo il
+nome del prodotto e sceglie i revisori, poi pubblica il risultato nel canale.
+
+Tocca **📢 Annuncio** nel menu del bot (oppure invia un semplice `/announce`) e ti
+verrà chiesta una cosa per messaggio — titolo, poi i link MR/PR, la documentazione, il
+task — con un pulsante **⏭ Salta** su ogni passaggio facoltativo. Che ogni risposta
+arrivi nel suo messaggio è anche ciò che fa funzionare i link incollati come
+collegamento ipertestuale: `Documentazione: Confluence`, dove *Confluence* è un link,
+non porta nessun URL nel testo del messaggio — e leggere solo il testo visibile è
+esattamente ciò che faceva pubblicare un post con la riga della documentazione
+silenziosamente vuota.
+
+Da cosa salti derivano due percorsi:
+
+- **Nessuna MR/PR** — una correzione solo SQL, o una modifica alla documentazione — e
+  il bot chiede a quale prodotto appartiene, perché non c'è nessun repository da cui
+  dedurlo. Il post viene comunque tracciato: basta una riga di revisori messa di
+  proposito, nessuna merge request richiesta.
+- **Nessun link alla documentazione** e il bot offre al suo posto una
+  **Descrizione** in testo libero, che esce come riga `Descrizione:` del template.
+
+Se hai già il testo pronto negli appunti, la forma in un unico messaggio funziona
+ancora:
+
+```
+/announce Miglioramento del connection pool
+https://gitlab.example.com/example/demo-project/-/merge_requests/1112
+Documentazione: https://wiki.example.com/pages/1
+```
+
+In entrambi i casi il bot risponde con un'anteprima e tre pulsanti — **Pubblica**,
+**🔁 Altro revisore**, **Annulla** — così puoi ripescare un altro nome prima che parta
+(magari quello estratto è in ferie) oppure annullare del tutto. Una volta pubblicato,
+il post segue esattamente lo stesso percorso di analisi e tracciamento di uno scritto
+a mano — non riceve nessun trattamento speciale.
+
+La selezione dei revisori si configura via ambiente, una voce per ogni progetto
+GitLab, con la stessa chiave `project_path` che un link a una MR porta già con sé:
+
+```dotenv
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+```
+
+- `product` — mostrato sul post generato.
+- `techlead` *(facoltativo)* — sempre incluso, a meno che non sia proprio lui a
+  lanciare `/announce`.
+- `pool` — candidati per i posti rimanenti, estratti a caso, escluso chi lo compone.
+- `reviewer_count` *(facoltativo, default 2)* — totale dei revisori sul post, techlead
+  incluso.
+
+La riga dell'autore qui si risolve gratis — a differenza di un post scritto a mano,
+l'identità di chi lo compone è già nota dal messaggio privato, senza bisogno di
+nessuna etichetta facoltativa.
+
+Nominare più link a MR coinvolge più repository in una volta sola — va bene, purché
+siano tutti configurati in modo identico in `REVIEW_PROJECTS`. Se due repository
+nominati non coincidono (prodotto, techlead o pool diversi), la bozza viene respinta
+subito con i nomi dei progetti in conflitto, invece di sceglierne uno in silenzio.
+
 La card che compare nel thread dei commenti sotto il post:
 
 ```
@@ -311,6 +372,28 @@ silenzio un 👍.
 
 ---
 
+## Statistiche del team
+
+Un digest periodico via messaggio privato con due numeri, per persona: quanto ha
+impiegato un autore a occuparsi di "modifiche richieste" da quando sono arrivate, e
+quanto ha impiegato un revisore a dare il primo verdetto. Le medie più lente sono
+elencate per prime.
+
+Non viene inviato nulla finché non è configurato almeno un destinatario:
+
+```dotenv
+STATS_REPORT_RECIPIENT_IDS=123456789,987654321
+STATS_REPORT_INTERVAL_DAYS=7
+```
+
+Lo stesso digest è disponibile a richiesta con `/stats` — limitato alla stessa lista
+di destinatari, trattandosi di dati sui tempi delle singole persone.
+
+Conta solo da quando questa cronologia ha iniziato a essere registrata — non c'è modo
+di recuperare le review chiuse prima che esistesse.
+
+---
+
 ## Lingue supportate
 
 Supportate: russo, inglese, spagnolo, italiano, cinese (`ru`, `en`, `es`, `it`, `zh`).
@@ -344,9 +427,11 @@ silenzio sull'inglese in produzione.
 |---|---|
 | `/start` | ti registra; collega il tuo @username al tuo id e trova le review in sospeso su di te |
 | `/status` | cosa è in sospeso su di te adesso, con le scadenze e un link a ogni post |
+| `/announce` | compone il post del canale al posto tuo — vedi [Generare il post per te](#generare-il-post-per-te) |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
 | `/lang <codice>` | cambia la lingua del bot per i tuoi messaggi privati |
 | `/mute 2h`, `/unmute` | silenzia / riattiva i promemoria |
+| `/stats` | il digest delle statistiche del team, a richiesta — solo destinatari configurati, vedi [Statistiche del team](#statistiche-del-team) |
 
 ---
 
@@ -358,7 +443,7 @@ poetry install
 cp .env.example .env                # compila BOT_TOKEN
 poetry run python -m reviewpulse    # le migrazioni si applicano da sole all'avvio
 
-poetry run pytest                   # 122 test
+poetry run pytest                   # 240 test
 poetry run ruff check src tests
 ```
 
@@ -404,8 +489,8 @@ src/reviewpulse/
   parsing/                 analisi dei post ed estrazione dei link alle MR
   gitlab/                  client REST e analisi dei thread
   db/                      modelli, sessione, query
-  services/                collante dominio + DB: review, promemoria, sincronizzazione GitLab
-  telegram/                 bot, handler, card, testi tradotti
+  services/                collante dominio + DB: review, promemoria, sincronizzazione GitLab, annunci, statistiche
+  telegram/                 bot, handler, card, rendering di annunci e statistiche, testi tradotti
   scheduler/                il tick dei promemoria e il tick di sincronizzazione
 migrations/                Alembic
 ```
@@ -428,3 +513,15 @@ migrations/                Alembic
   (vedi [Come si presenta](#come-si-presenta)) — un'etichetta fuori da quell'elenco,
   in qualsiasi lingua, ricade sull'euristica posizionale invece di essere letta
   direttamente.
+- **`/announce` richiede che ogni progetto referenziato sia configurato in modo
+  identico** — una bozza che nomina MR di più repository va bene finché le loro
+  voci in `REVIEW_PROJECTS` coincidono esattamente
+  (prodotto/techlead/pool/reviewer_count); se non coincidono, la bozza viene
+  respinta con i nomi dei progetti in conflitto invece di sceglierne uno.
+- **Un `/announce` lasciato a metà non sopravvive a un riavvio** — la procedura
+  guidata passo passo tiene le risposte in memoria, quindi un redeploy a metà
+  composizione significa ricominciare. La bozza già completata è una riga nel DB e
+  non ne risente.
+- **Le statistiche coprono solo le transizioni registrate da quando è stata
+  lanciata la funzione** — non c'è modo di recuperare le review chiuse prima che
+  esistesse quella tabella di cronologia.
