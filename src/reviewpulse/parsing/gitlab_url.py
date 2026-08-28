@@ -13,7 +13,7 @@ import re
 from typing import Literal
 from urllib.parse import quote, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 #: https://git.example.com/backend/services/api_controller/-/merge_requests/1112
 #: The project path is everything between the host and the `/-/` separator.
@@ -55,6 +55,13 @@ class MergeRequestRef(BaseModel):
 
 
 def parse_merge_request_url(url: str) -> MergeRequestRef | None:
+    """`None` for anything that isn't a real reference — including a URL that matches
+    the shape but not the substance, like `iid=0` (neither GitLab nor GitHub ever
+    issues that one; someone's placeholder test link, most likely). Letting
+    `MergeRequestRef`'s own validation raise here would take the one bad link's
+    whole caller down with it — `find_merge_requests` would lose every *other* MR it
+    had already found in the same post, and in `/announce` the composer's message
+    would just go unanswered."""
     parts = urlsplit(url.strip())
     if not parts.netloc:
         return None
@@ -62,12 +69,15 @@ def parse_merge_request_url(url: str) -> MergeRequestRef | None:
     for platform, pattern in (("gitlab", _GITLAB_MR_PATH), ("github", _GITHUB_PR_PATH)):
         match = pattern.match(parts.path)
         if match:
-            return MergeRequestRef(
-                host=parts.netloc,
-                project_path=match.group("project").strip("/"),
-                iid=int(match.group("iid")),
-                platform=platform,
-            )
+            try:
+                return MergeRequestRef(
+                    host=parts.netloc,
+                    project_path=match.group("project").strip("/"),
+                    iid=int(match.group("iid")),
+                    platform=platform,
+                )
+            except ValidationError:
+                return None
     return None
 
 

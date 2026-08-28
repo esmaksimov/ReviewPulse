@@ -159,6 +159,29 @@ def test_project_path_is_url_encoded_for_the_api() -> None:
     assert ref.platform == "gitlab"
 
 
+def test_an_iid_of_zero_is_not_a_valid_merge_request() -> None:
+    """Neither GitLab nor GitHub ever issues iid 0 - someone's placeholder test link,
+    most likely (e.g. a chain of zeros). The URL shape matches, but MergeRequestRef's
+    own `gt=0` constraint rejects it; this must come back as "no match", not raise -
+    an uncaught ValidationError here left a real `/announce` message unanswered."""
+    assert parse_merge_request_url("https://git.example.com/g/p/-/merge_requests/0") is None
+    assert (
+        parse_merge_request_url("https://git.example.com/g/p/-/merge_requests/00000000")
+        is None
+    )
+
+
+def test_a_zero_iid_link_does_not_swallow_a_real_one_in_the_same_post() -> None:
+    """The bug this guards against isn't just "one bad link is skipped" - it's that a
+    raised (rather than caught) ValidationError unwound the whole find_merge_requests
+    scan, losing every other link already found in the same post."""
+    refs = find_merge_requests(
+        "MR: https://git.example.com/g/p/-/merge_requests/00000000\n"
+        "MR: https://git.example.com/g/p/-/merge_requests/7"
+    )
+    assert [ref.iid for ref in refs] == [7]
+
+
 def test_a_github_pull_request_link_is_recognized() -> None:
     ref = parse_merge_request_url("https://github.com/example-org/example-repo/pull/42")
     assert ref is not None
