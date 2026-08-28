@@ -376,8 +376,9 @@ silenzio un 👍.
 
 Un digest periodico via messaggio privato con due numeri, per persona: quanto ha
 impiegato un autore a occuparsi di "modifiche richieste" da quando sono arrivate, e
-quanto ha impiegato un revisore a dare il primo verdetto. Le medie più lente sono
-elencate per prime.
+quanto ha impiegato un revisore a dare il primo verdetto — la mediana, non la media,
+così una risposta anomala non distorce un numero basato su pochi campioni. Le
+mediane più lente sono elencate per prime.
 
 Non viene inviato nulla finché non è configurato almeno un destinatario:
 

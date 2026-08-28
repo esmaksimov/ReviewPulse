@@ -358,7 +358,8 @@ thread can't silently revoke a 👍.
 
 A periodic DM digest of two numbers, broken down per person: how long an author took
 to address "changes requested" once it landed, and how long a reviewer took to give
-their first verdict. Slowest averages listed first.
+their first verdict — the median, not the mean, so one outlier response doesn't skew
+a number based on only a handful of samples. Slowest medians listed first.
 
 Nothing is sent unless at least one recipient is configured:
 

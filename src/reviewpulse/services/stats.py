@@ -10,6 +10,7 @@ Telegram and the scheduler live elsewhere and merely call in here.
 
 from __future__ import annotations
 
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -22,18 +23,21 @@ from ..domain.state import Event, ReviewerState
 class PersonStat:
     label: str
     sample_count: int
-    total: timedelta
+    durations: tuple[timedelta, ...]
 
     @property
-    def average(self) -> timedelta:
-        return self.total / self.sample_count if self.sample_count else timedelta()
+    def median(self) -> timedelta:
+        """The middle duration, not the mean — a techlead asked for this explicitly:
+        one bad (or great) day skews a mean hard when `sample_count` is this small
+        (often 1-2 over a report window), and the median shrugs it off."""
+        return statistics.median(self.durations) if self.durations else timedelta()
 
 
 @dataclass(frozen=True)
 class StatsReport:
     since: datetime
     until: datetime
-    #: Slowest average first.
+    #: Slowest median first.
     author_fix_time: list[PersonStat]
     reviewer_response_time: list[PersonStat]
 
@@ -88,8 +92,8 @@ def build_report(
 
 def _ranked(samples: dict[str, list[timedelta]]) -> list[PersonStat]:
     stats = [
-        PersonStat(label=label, sample_count=len(durations), total=sum(durations, timedelta()))
+        PersonStat(label=label, sample_count=len(durations), durations=tuple(durations))
         for label, durations in samples.items()
     ]
-    stats.sort(key=lambda s: s.average, reverse=True)
+    stats.sort(key=lambda s: s.median, reverse=True)
     return stats

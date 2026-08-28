@@ -372,8 +372,9 @@ para que un hilo reabierto por otra persona no revoque un 👍 en silencio.
 
 Un resumen periódico por mensaje privado con dos números, desglosados por persona:
 cuánto tardó un autor en atender un "se piden cambios" desde que llegó, y cuánto
-tardó un revisor en dar su primer veredicto. Los promedios más lentos aparecen
-primero.
+tardó un revisor en dar su primer veredicto — la mediana, no la media, para que una
+respuesta atípica no distorsione un número basado en tan pocas muestras. Las medianas
+más lentas aparecen primero.
 
 No se envía nada a menos que haya al menos un destinatario configurado:
 

@@ -76,7 +76,7 @@ def test_reviewer_response_time_measured_from_assignment_creation() -> None:
     assert len(report.reviewer_response_time) == 1
     stat = report.reviewer_response_time[0]
     assert stat.label == "@rev"
-    assert stat.average == timedelta(hours=2)
+    assert stat.median == timedelta(hours=2)
     assert stat.sample_count == 1
     assert report.author_fix_time == []
 
@@ -105,10 +105,10 @@ def test_author_fix_time_paired_from_request_changes_to_fixes_done() -> None:
 
     assert len(report.author_fix_time) == 1
     assert report.author_fix_time[0].label == "@author"
-    assert report.author_fix_time[0].average == timedelta(hours=3)
+    assert report.author_fix_time[0].median == timedelta(hours=3)
     # The same two rows also answer "how fast did the reviewer first respond".
     assert len(report.reviewer_response_time) == 1
-    assert report.reviewer_response_time[0].average == timedelta(hours=1)
+    assert report.reviewer_response_time[0].median == timedelta(hours=1)
 
 
 def test_fix_time_sample_dropped_when_the_author_is_unknown() -> None:
@@ -189,7 +189,7 @@ def test_ranks_slowest_average_first() -> None:
     assert [stat.label for stat in report.reviewer_response_time] == ["@slow", "@fast"]
 
 
-def test_multiple_samples_for_the_same_person_are_averaged() -> None:
+def test_multiple_samples_for_the_same_person_are_combined_by_median() -> None:
     review = _review(1, author_user_id=None, author_label=None)
     a = _assignment(1, label="@rev", created_at=_at(9))
     b = _assignment(2, label="@rev", created_at=_at(9))
@@ -217,7 +217,35 @@ def test_multiple_samples_for_the_same_person_are_averaged() -> None:
     assert len(report.reviewer_response_time) == 1
     stat = report.reviewer_response_time[0]
     assert stat.sample_count == 2
-    assert stat.average == timedelta(hours=3)  # (2h + 4h) / 2
+    # For exactly two samples the median (the average of the two middle values) and
+    # the mean happen to coincide - see the next test for a case where they don't.
+    assert stat.median == timedelta(hours=3)  # (2h + 4h) / 2
+
+
+def test_the_median_is_not_dragged_by_a_single_outlier() -> None:
+    """The whole reason this is a median and not a mean: a techlead asked for it
+    explicitly, because one very slow (or very fast) response otherwise skews the
+    number hard when sample counts are this small."""
+    review = _review(1, author_user_id=None, author_label=None)
+    assignments = [_assignment(i, label="@rev", created_at=_at(0)) for i in range(1, 4)]
+    hours_after_creation = [1, 2, 100]  # the 100h response is the outlier
+    rows = [
+        _transition(
+            assignment,
+            review,
+            from_state=ReviewerState.PENDING,
+            to_state=ReviewerState.APPROVED,
+            event=Event.APPROVE,
+            at=_at(0) + timedelta(hours=hours),
+        )
+        for assignment, hours in zip(assignments, hours_after_creation, strict=True)
+    ]
+
+    report = build_report(rows, since=_at(0), until=_at(0) + timedelta(hours=200))
+
+    stat = report.reviewer_response_time[0]
+    assert stat.sample_count == 3
+    assert stat.median == timedelta(hours=2), "the middle value, not the ~34h mean"
 
 
 def test_empty_report_has_no_samples() -> None:

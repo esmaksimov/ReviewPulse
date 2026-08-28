@@ -196,7 +196,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "stats_fix_time_empty": "Правок за этот период не было.",
         "stats_response_time_header": "<b>Дольше всех реагируют на новое ревью:</b>",
         "stats_response_time_empty": "Новых вердиктов за этот период не было.",
-        "stats_person_line": "• {label} — {avg} в среднем ({count})",
+        "stats_person_line": "• {label} — медиана {median} ({count})",
         "stats_command_no_access": "Эта команда тебе недоступна.",
     },
     "en": {
@@ -347,7 +347,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "stats_fix_time_empty": "No fixes completed this period.",
         "stats_response_time_header": "<b>Slowest to give a first verdict:</b>",
         "stats_response_time_empty": "No first verdicts this period.",
-        "stats_person_line": "• {label} — {avg} avg ({count})",
+        "stats_person_line": "• {label} — median {median} ({count})",
         "stats_command_no_access": "This command isn't available to you.",
     },
     "es": {
@@ -502,7 +502,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "stats_fix_time_empty": "No hubo correcciones en este período.",
         "stats_response_time_header": "<b>Más lentos en dar un primer veredicto:</b>",
         "stats_response_time_empty": "No hubo primeros veredictos en este período.",
-        "stats_person_line": "• {label} — {avg} de media ({count})",
+        "stats_person_line": "• {label} — mediana {median} ({count})",
         "stats_command_no_access": "Este comando no está disponible para ti.",
     },
     "it": {
@@ -657,7 +657,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "stats_fix_time_empty": "Nessuna correzione in questo periodo.",
         "stats_response_time_header": "<b>Più lenti a dare un primo verdetto:</b>",
         "stats_response_time_empty": "Nessun primo verdetto in questo periodo.",
-        "stats_person_line": "• {label} — {avg} in media ({count})",
+        "stats_person_line": "• {label} — mediana {median} ({count})",
         "stats_command_no_access": "Questo comando non è disponibile per te.",
     },
     "zh": {
@@ -786,7 +786,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "stats_fix_time_empty": "此时间段内没有完成的修复。",
         "stats_response_time_header": "<b>给出首次结论最慢的人：</b>",
         "stats_response_time_empty": "此时间段内没有首次结论。",
-        "stats_person_line": "• {label} — 平均 {avg}（{count} 次）",
+        "stats_person_line": "• {label} — 中位数 {median}（{count} 次）",
         "stats_command_no_access": "你没有权限使用此命令。",
     },
 }

@@ -47,7 +47,7 @@ def _lines(stats: list[PersonStat], locale: str, *, empty_key: str) -> list[str]
             locale,
             "stats_person_line",
             label=stat.label,
-            avg=texts.humanize(locale, stat.average),
+            median=texts.humanize(locale, stat.median),
             count=stat.sample_count,
         )
         for stat in stats
