@@ -4,6 +4,12 @@ Built entirely from `AssignmentTransition` rows (`db.repo.transitions_between`) 
 that model's docstring for why this can only ever look forward from when it was
 added, never backfill reviews that happened before it existed.
 
+Every duration is *working* time, via the same `WorkCalendar` the escalation policy
+uses for deadlines — not wall-clock. A "changes requested" at 17:30 Friday, answered
+09:00 Monday, is 30 minutes late, not a weekend-long one; counting the calendar gap
+instead would treat every Friday-afternoon review as if the reviewer had been
+unusually slow.
+
 Pure module, like `domain.state`: takes rows plus a window, returns a `StatsReport`.
 Telegram and the scheduler live elsewhere and merely call in here.
 """
@@ -17,6 +23,7 @@ from datetime import datetime, timedelta
 
 from ..db.models import AssignmentTransition
 from ..domain.state import Event, ReviewerState
+from ..domain.workhours import WorkCalendar
 
 
 @dataclass(frozen=True)
@@ -27,9 +34,9 @@ class PersonStat:
 
     @property
     def median(self) -> timedelta:
-        """The middle duration, not the mean — a techlead asked for this explicitly:
-        one bad (or great) day skews a mean hard when `sample_count` is this small
-        (often 1-2 over a report window), and the median shrugs it off."""
+        """The middle duration, not the mean: one bad (or great) day skews a mean
+        hard when `sample_count` is this small (often 1-2 over a report window), and
+        the median shrugs it off."""
         return statistics.median(self.durations) if self.durations else timedelta()
 
 
@@ -47,7 +54,11 @@ class StatsReport:
 
 
 def build_report(
-    transitions: list[AssignmentTransition], *, since: datetime, until: datetime
+    transitions: list[AssignmentTransition],
+    calendar: WorkCalendar,
+    *,
+    since: datetime,
+    until: datetime,
 ) -> StatsReport:
     """`transitions` must be ordered per-assignment (see `transitions_between`) and
     should cover exactly `[since, until)` — a transition just outside that window,
@@ -68,7 +79,7 @@ def build_report(
         # it as a response time would measure against the wrong starting point.
         if first.from_state is ReviewerState.PENDING:
             response_samples[first.assignment.display_label].append(
-                first.at - first.assignment.created_at
+                _working_time(calendar, first.assignment.created_at, first.at)
             )
 
         for prev, cur in zip(rows, rows[1:], strict=False):
@@ -80,7 +91,7 @@ def build_report(
             if author is None:
                 continue  # nobody to attribute this to — see _sync_author
             label = cur.review.author_label or f"@{cur.review.author_username}"
-            fix_samples[label].append(cur.at - prev.at)
+            fix_samples[label].append(_working_time(calendar, prev.at, cur.at))
 
     return StatsReport(
         since=since,
@@ -88,6 +99,10 @@ def build_report(
         author_fix_time=_ranked(fix_samples),
         reviewer_response_time=_ranked(response_samples),
     )
+
+
+def _working_time(calendar: WorkCalendar, begin: datetime, end: datetime) -> timedelta:
+    return timedelta(seconds=calendar.working_seconds_between(begin, end))
 
 
 def _ranked(samples: dict[str, list[timedelta]]) -> list[PersonStat]:

@@ -361,6 +361,10 @@ to address "changes requested" once it landed, and how long a reviewer took to g
 their first verdict — the median, not the mean, so one outlier response doesn't skew
 a number based on only a handful of samples. Slowest medians listed first.
 
+Both are measured in working time, same calendar as [Working hours](#working-hours)
+below — "changes requested" at 17:30 Friday and answered 09:30 Monday is an hour,
+not the ~64-hour weekend-including gap.
+
 Nothing is sent unless at least one recipient is configured:
 
 ```dotenv

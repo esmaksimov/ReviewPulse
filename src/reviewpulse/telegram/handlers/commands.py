@@ -135,7 +135,8 @@ async def on_stats(message: Message, session: AsyncSession, settings: Settings) 
     until = utcnow()
     since = until - settings.stats_report_interval
     transitions = await repo.transitions_between(session, since, until)
-    report = stats_service.build_report(transitions, since=since, until=until)
+    calendar = calendar_from_settings(settings)
+    report = stats_service.build_report(transitions, calendar, since=since, until=until)
     await message.answer(
         stats_report.render(report, locale, settings.timezone_offset_hours),
         disable_web_page_preview=True,

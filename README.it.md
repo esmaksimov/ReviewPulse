@@ -380,6 +380,11 @@ quanto ha impiegato un revisore a dare il primo verdetto — la mediana, non la 
 così una risposta anomala non distorce un numero basato su pochi campioni. Le
 mediane più lente sono elencate per prime.
 
+Entrambi si misurano in orario di lavoro, lo stesso calendario di
+[Orario di lavoro](#orario-di-lavoro) più sotto — "modifiche richieste" venerdì alle
+17:30 e risposta lunedì alle 09:30 è un'ora, non le ~64 ore che comprendono il
+weekend.
+
 Non viene inviato nulla finché non è configurato almeno un destinatario:
 
 ```dotenv

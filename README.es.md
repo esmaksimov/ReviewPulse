@@ -376,6 +376,11 @@ tardó un revisor en dar su primer veredicto — la mediana, no la media, para q
 respuesta atípica no distorsione un número basado en tan pocas muestras. Las medianas
 más lentas aparecen primero.
 
+Ambos se miden en horario laboral, el mismo calendario que
+[Horario laboral](#horario-laboral) más abajo — "se piden cambios" el viernes a las
+17:30 y respondido el lunes a las 09:30 es una hora, no las ~64 horas que incluyen
+el fin de semana.
+
 No se envía nada a menos que haya al menos un destinatario configurado:
 
 ```dotenv

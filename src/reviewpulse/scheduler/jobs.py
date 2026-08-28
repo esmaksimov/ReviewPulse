@@ -89,7 +89,8 @@ async def stats_report_tick(bot: Bot, database: Database, settings: Settings) ->
     since = until - settings.stats_report_interval
     async with database.session() as session:
         transitions = await repo.transitions_between(session, since, until)
-        report = stats_service.build_report(transitions, since=since, until=until)
+        calendar = calendar_from_settings(settings)
+        report = stats_service.build_report(transitions, calendar, since=since, until=until)
 
         sent = 0
         for recipient_id in settings.stats_report_recipient_ids:
