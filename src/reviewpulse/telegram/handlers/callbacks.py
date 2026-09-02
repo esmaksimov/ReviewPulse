@@ -100,6 +100,7 @@ async def _verdict(
             bot, session, review, assignment.display_label, settings.default_locale
         )
     if result.review_closed:
+        await sender.notify_author_review_approved(bot, session, review, settings.default_locale)
         return texts.t(locale, "answer_closed_by_approval")
     return texts.t(locale, "answer_approved" if event is Event.APPROVE else "answer_changes")
 

@@ -40,6 +40,19 @@ async def get_user_by_username(session: AsyncSession, username: str) -> User | N
     return result.scalars().first()
 
 
+async def get_unique_user_by_full_name(session: AsyncSession, full_name: str) -> User | None:
+    """Fallback for an "Автор:"/"Ревьювер:" line that names someone by their Telegram
+    display name instead of an @handle — common since typing a bare name is the path
+    of least resistance. Only resolves when exactly one known user has that name
+    (case-insensitively): a shared first name (two people named "Alice") must not
+    risk sending someone else's notifications to the wrong person, so it backs off to
+    "unresolved" instead of guessing, same as if the name had never matched at all.
+    """
+    result = await session.execute(select(User).where(User.full_name.ilike(full_name)))
+    rows = result.scalars().all()
+    return rows[0] if len(rows) == 1 else None
+
+
 async def upsert_user(
     session: AsyncSession,
     telegram_user_id: int,

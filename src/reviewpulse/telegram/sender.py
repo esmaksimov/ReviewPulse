@@ -101,3 +101,43 @@ async def notify_author_changes_requested(
             author.can_be_dmed = False
     except TelegramRetryAfter as exc:
         logger.warning("flood limit, dropping author notice: retry after %ss", exc.retry_after)
+
+
+async def notify_author_review_approved(
+    bot: Bot,
+    session: AsyncSession,
+    review: Review,
+    default_locale: str,
+) -> None:
+    """Tell the author their review just reached quorum and closed.
+
+    Mirrors `notify_author_changes_requested` — same author-resolution gate, same
+    `can_be_dmed` mute-on-block behaviour. Only ever fired from the button-press path
+    (`handlers.callbacks`): GitLab sync never issues an APPROVE event on its own (see
+    `services.gitlab_sync._SYNCABLE`), so a review can only close there.
+    """
+    if review.author_user_id is None:
+        return
+
+    author = await repo.get_user_by_telegram_id(session, review.author_user_id)
+    if author is not None and not author.can_be_dmed:
+        return
+    locale = resolve_locale(author.locale if author else None, default=default_locale)
+
+    try:
+        await bot.send_message(
+            chat_id=review.author_user_id,
+            text=texts.author_review_approved(
+                locale,
+                headline=card.headline(review, locale),
+                review_url=card.review_url(review),
+                merge_request_urls=[link.web_url for link in review.merge_requests],
+            ),
+            disable_web_page_preview=True,
+        )
+    except TelegramForbiddenError:
+        logger.info("author %s cannot be DMed; muting", review.author_user_id)
+        if author is not None:
+            author.can_be_dmed = False
+    except TelegramRetryAfter as exc:
+        logger.warning("flood limit, dropping approval notice: retry after %ss", exc.retry_after)

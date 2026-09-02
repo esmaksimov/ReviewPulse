@@ -236,6 +236,54 @@ async def test_without_an_author_line_no_author_is_tracked(session) -> None:
     assert review.author_username is None
 
 
+async def test_the_channels_post_signature_resolves_a_unique_full_name(session) -> None:
+    """Most posts carry no "Автор:" line at all — Telegram's own post signature
+    (`message.author_signature`, threaded through as `author_label`) is the only
+    source of a name, and it's still worth resolving when it uniquely identifies a
+    known user."""
+    await repo.upsert_user(session, 555, username="alice", full_name="Alice")
+    review = await review_service.create_or_update_review(
+        session,
+        channel_chat_id=-1001234567890,
+        channel_message_id=42,
+        post=parse_post(POST),
+        raw_text=POST,
+        posted_at=msk(27, 10, 0),
+        author_label="Alice",
+    )
+
+    assert review.author_user_id == 555
+
+
+async def test_a_bare_name_on_the_author_line_resolves_by_unique_full_name(session) -> None:
+    """`_find_author` declines to guess a handle for a bare name on the "Автор:"
+    line, but the resulting `author_label` still goes through the same full-name
+    fallback as a post signature would."""
+    await repo.upsert_user(session, 555, username="alice", full_name="Alice")
+    review = await make_review(session, text=POST + "\nАвтор: Alice")
+
+    assert review.author_user_id == 555
+    assert review.author_label == "Alice"
+
+
+async def test_a_full_name_shared_by_two_known_users_is_not_guessed(session) -> None:
+    """Two people named "Alice" — resolving to either would risk DMing the wrong
+    one, so this backs off to unresolved rather than picking one."""
+    await repo.upsert_user(session, 555, username="alice", full_name="Alice")
+    await repo.upsert_user(session, 777, username="alice2", full_name="Alice")
+    review = await review_service.create_or_update_review(
+        session,
+        channel_chat_id=-1001234567890,
+        channel_message_id=42,
+        post=parse_post(POST),
+        raw_text=POST,
+        posted_at=msk(27, 10, 0),
+        author_label="Alice",
+    )
+
+    assert review.author_user_id is None
+
+
 async def test_the_author_reviewing_their_own_post_is_not_added_as_a_reviewer(session) -> None:
     """Mirrors the existing user_id-based self-review skip, but keyed off the
     @handle: the author's own telegram id is not known yet at post time."""

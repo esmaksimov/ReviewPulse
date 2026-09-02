@@ -378,11 +378,17 @@ def test_no_author_line_leaves_the_author_unresolved() -> None:
     assert post.author is None
 
 
-def test_an_author_line_without_a_handle_is_not_guessed_at() -> None:
-    """A bare name gives us nothing to DM — better to leave it unresolved than to
-    misattribute the review to whoever happens to be mentioned elsewhere in it."""
+def test_an_author_line_without_a_handle_carries_the_name_but_no_telegram_id() -> None:
+    """A bare name is not a handle to DM directly — resolving it to an actual
+    Telegram id (only if it uniquely matches one known user) is
+    `services.reviews._sync_author`'s job, not the parser's; here it's just carried
+    through as `display_name`, same as a `text_mention` entity's shown name would
+    be."""
     post = parse_post(REAL_POST + "\n\nАвтор: Иван Иванов")
-    assert post.author is None
+    assert post.author is not None
+    assert post.author.display_name == "Иван Иванов"
+    assert post.author.username is None
+    assert post.author.user_id is None
 
 
 def test_english_author_label_is_recognized() -> None:

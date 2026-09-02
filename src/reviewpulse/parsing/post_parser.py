@@ -194,18 +194,25 @@ def _continuation(rest: list[str]) -> list[str]:
 
 
 def _find_author(lines: list[str]) -> ReviewerMention | None:
-    """The single @handle on an "Автор:"-style line, if there is one.
+    """The single @handle on an "Автор:"-style line, if there is one — or, failing
+    that, whatever plain text follows the label.
 
     Unlike `_find_reviewers`, there is no whole-post fallback: an unlabelled @handle
     could be anyone mentioned in passing, and guessing wrong would DM a stranger every
-    time a reviewer requests changes. No handle on the label line — a bare name, say
-    — leaves the author unresolved rather than guessing at one.
+    time a reviewer requests changes. A bare name on the label line itself is a
+    deliberate, if imprecise, self-identification though — carried through as
+    `display_name` and left for `services.reviews._sync_author` to resolve only if it
+    uniquely matches one known user, the same conservative match a channel post's own
+    signature already gets.
     """
     for line in lines:
         if not _AUTHOR_LABEL.match(line):
             continue
         found = _USERNAME.findall(line)
-        return ReviewerMention(username=found[0]) if found else None
+        if found:
+            return ReviewerMention(username=found[0])
+        name = _AUTHOR_LABEL.sub("", line, count=1).strip()
+        return ReviewerMention(display_name=name) if name else None
     return None
 
 

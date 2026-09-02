@@ -118,6 +118,18 @@ def test_author_changes_requested_names_the_reviewer_and_links_the_review() -> N
     assert "https://git.example.com/x/-/merge_requests/1" in message
 
 
+def test_author_review_approved_links_the_review() -> None:
+    message = texts.author_review_approved(
+        "en",
+        headline="Payments",
+        review_url="https://t.me/c/123/456",
+        merge_request_urls=["https://git.example.com/x/-/merge_requests/1"],
+    )
+    assert "Payments" in message
+    assert "https://t.me/c/123/456" in message
+    assert "https://git.example.com/x/-/merge_requests/1" in message
+
+
 # --- HTML escaping ----------------------------------------------------------
 #
 # Every message goes out with parse_mode=HTML, so an unescaped "<" in a post title
@@ -188,6 +200,17 @@ def test_a_post_title_with_angle_brackets_is_escaped_for_the_author_notice() -> 
     message = texts.author_changes_requested(
         "ru",
         reviewer="@alice",
+        headline=UNSAFE,
+        review_url=None,
+        merge_request_urls=[],
+    )
+    assert ESCAPED in message
+    assert UNSAFE not in message
+
+
+def test_a_post_title_with_angle_brackets_is_escaped_for_the_approval_notice() -> None:
+    message = texts.author_review_approved(
+        "ru",
         headline=UNSAFE,
         review_url=None,
         merge_request_urls=[],

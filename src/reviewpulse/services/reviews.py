@@ -90,27 +90,36 @@ async def create_or_update_review(
 
 
 async def _sync_author(session: AsyncSession, review: Review, post: ParsedPost) -> None:
-    """Resolve an opt-in "Автор:" line to a Telegram id, the same way a reviewer's
-    @handle resolves.
+    """Resolve the author to a Telegram id, so "changes requested"/"review approved"
+    DMs and the /status entry have somewhere to go.
 
-    There is no fallback for this one: unlike reviewers, an author with no labelled
-    line is simply not tracked (see `parsing.post_parser._find_author`) — channel
-    posts carry no `from_user`, so without a self-named handle the bot has no way to
-    know who to notify, and this review's author-side features (the DM on "changes
-    requested", the /status entry) just stay inert for it.
+    Two independent sources feed `author_label`: an opt-in "Автор:" line in the post
+    (`post.author`, handled below), and the channel's own post signature
+    (`author_label=message.author_signature`, set by the caller in
+    `create_or_update_review` before this runs) — most posts carry the latter and
+    nothing else. Neither is a Telegram id by itself. An "Автор: @handle" line
+    resolves the same way a reviewer's @handle does; anything else — a signature, or
+    a bare display name on the "Автор:" line ("Alice", not "@alice"), which
+    `_find_author` deliberately declines to guess a handle for — falls back to a
+    unique-full-name match (`repo.get_unique_user_by_full_name`). Genuinely
+    unresolvable only when no source named anyone, or the name is shared by more than
+    one known user.
     """
     mention = post.author
-    if mention is None:
-        return
+    if mention is not None:
+        review.author_username = mention.username
+        if review.author_label is None:
+            review.author_label = mention.label
 
-    review.author_username = mention.username
-    if review.author_label is None:
-        review.author_label = mention.label
+        if mention.user_id is not None:
+            review.author_user_id = mention.user_id
+        elif mention.username:
+            user = await repo.get_user_by_username(session, mention.username)
+            if user is not None:
+                review.author_user_id = user.telegram_user_id
 
-    if mention.user_id is not None:
-        review.author_user_id = mention.user_id
-    elif mention.username:
-        user = await repo.get_user_by_username(session, mention.username)
+    if review.author_user_id is None and review.author_label:
+        user = await repo.get_unique_user_by_full_name(session, review.author_label)
         if user is not None:
             review.author_user_id = user.telegram_user_id
 

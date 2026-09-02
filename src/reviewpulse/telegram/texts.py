@@ -80,6 +80,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_open_discussion": "Открыть обсуждение",
         "author_changes_requested_title": "✍️ <b>Просят правки</b>",
         "author_changes_requested_body": "{reviewer} оставил(а) замечания по твоему ревью.",
+        "author_review_approved_title": "✅ <b>Ревью одобрено</b>",
+        "author_review_approved_body": "Набралось нужное число апрувов — можно мёржить.",
         "unit_minute": "мин",
         "unit_hour": "ч",
         "status_header": "<b>Ревью на тебе</b>",
@@ -230,6 +232,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_open_discussion": "Open discussion",
         "author_changes_requested_title": "✍️ <b>Changes requested</b>",
         "author_changes_requested_body": "{reviewer} left feedback on your review.",
+        "author_review_approved_title": "✅ <b>Review approved</b>",
+        "author_review_approved_body": "It reached the required number of approvals — ready to merge.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Reviews waiting on you</b>",
@@ -380,6 +384,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_open_discussion": "Abrir discusión",
         "author_changes_requested_title": "✍️ <b>Se solicitaron cambios</b>",
         "author_changes_requested_body": "{reviewer} dejó comentarios en tu revisión.",
+        "author_review_approved_title": "✅ <b>Revisión aprobada</b>",
+        "author_review_approved_body": "Se alcanzó el número necesario de aprobaciones — listo para mergear.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Revisiones pendientes de ti</b>",
@@ -536,6 +542,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_open_discussion": "Apri la discussione",
         "author_changes_requested_title": "✍️ <b>Modifiche richieste</b>",
         "author_changes_requested_body": "{reviewer} ha lasciato un commento sulla tua review.",
+        "author_review_approved_title": "✅ <b>Review approvata</b>",
+        "author_review_approved_body": "Ha raggiunto il numero di approvazioni richieste — pronta per il merge.",
         "unit_minute": "min",
         "unit_hour": "h",
         "status_header": "<b>Review in attesa da parte tua</b>",
@@ -685,6 +693,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "nudge_open_discussion": "打开讨论",
         "author_changes_requested_title": "✍️ <b>有人要求修改</b>",
         "author_changes_requested_body": "{reviewer} 对你的评审提出了意见。",
+        "author_review_approved_title": "✅ <b>评审已通过</b>",
+        "author_review_approved_body": "已达到所需的通过数 — 可以合并了。",
         "unit_minute": "分钟",
         "unit_hour": "小时",
         "status_header": "<b>等待你处理的评审</b>",
@@ -919,6 +929,28 @@ def author_changes_requested(
         t(locale, "author_changes_requested_title"),
         "",
         t(locale, "author_changes_requested_body", reviewer=reviewer),
+        "",
+        f"<b>{esc(headline)}</b>",
+    ]
+    if merge_request_urls:
+        lines.append("")
+        lines.extend(esc(url) for url in merge_request_urls)
+    if review_url:
+        lines.append("")
+        lines.append(f'<a href="{esc(review_url)}">{t(locale, "nudge_open_discussion")}</a>')
+    return "\n".join(lines)
+
+
+def author_review_approved(
+    locale: str,
+    headline: str,
+    review_url: str | None,
+    merge_request_urls: list[str],
+) -> str:
+    lines = [
+        t(locale, "author_review_approved_title"),
+        "",
+        t(locale, "author_review_approved_body"),
         "",
         f"<b>{esc(headline)}</b>",
     ]
