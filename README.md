@@ -490,10 +490,11 @@ migrations/              Alembic
 - **The bot can't see reactions on the post itself** (see above); the card is the
   source of truth.
 - **Closing a review deletes its post from the channel** (quorum reached, or the
-  "🗄 Close" button) — the discussion thread, including the card and every comment,
-  is untouched; only the channel listing gets decluttered. Requires the bot to have
-  the **Delete messages** admin right; without it, the close still happens, the post
-  just stays.
+  "🗄 Close" button) — not immediately, but `CHANNEL_CLEANUP_DELAY_HOURS` later
+  (default 4), so it's still visible for a while right after closing. The discussion
+  thread, including the card and every comment, is untouched; only the channel
+  listing gets decluttered. Requires the bot to have the **Delete messages** admin
+  right; without it, the close still happens, the post just stays.
 - **Public holidays aren't accounted for** — the bot will treat a national holiday as
   a normal working day.
 - **Post parsing recognizes a fixed set of label words** per field (see

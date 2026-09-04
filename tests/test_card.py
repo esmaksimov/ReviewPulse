@@ -15,17 +15,18 @@ from reviewpulse.telegram import card
 
 @dataclass
 class FakeBot:
-    """Records `delete_message` calls; `fail` makes it raise like Telegram does when
-    the bot lacks the "Delete messages" right, or the post is already gone."""
+    """Records `delete_message` calls; `fail_message` makes it raise like Telegram
+    does — with whatever error text the test needs, e.g. missing rights vs. the post
+    already being gone."""
 
-    fail: bool = False
+    fail_message: str | None = None
     deleted: list[tuple[int, int]] = field(default_factory=list)
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
-        if self.fail:
+        if self.fail_message is not None:
             raise TelegramBadRequest(
                 method=DeleteMessage(chat_id=chat_id, message_id=message_id),
-                message="message to delete not found",
+                message=self.fail_message,
             )
         self.deleted.append((chat_id, message_id))
 
@@ -116,8 +117,9 @@ async def test_delete_from_channel_removes_the_original_post() -> None:
     review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
     bot = FakeBot()
 
-    await card.delete_from_channel(bot, review)
+    result = await card.delete_from_channel(bot, review)
 
+    assert result is True
     assert bot.deleted == [(-1001111111111, 42)]
 
 
@@ -127,15 +129,31 @@ async def test_delete_from_channel_is_a_noop_before_the_channel_message_is_known
     review = Review(id=1, channel_chat_id=None, channel_message_id=None)
     bot = FakeBot()
 
-    await card.delete_from_channel(bot, review)
+    result = await card.delete_from_channel(bot, review)
 
+    assert result is False
     assert bot.deleted == []
 
 
-async def test_delete_from_channel_swallows_a_missing_permission_or_already_gone_post() -> None:
-    """Without the "Delete messages" admin right, or on a double-close replay,
-    Telegram refuses — that must not blow up the close itself."""
+async def test_delete_from_channel_reports_failure_when_the_bot_lacks_the_right() -> None:
+    """Without the "Delete messages" admin right, Telegram refuses — the caller
+    (`scheduler.jobs.channel_cleanup_tick`) needs `False` back to know to retry on
+    the next tick rather than mark this one done."""
     review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
-    bot = FakeBot(fail=True)
+    bot = FakeBot(fail_message="not enough rights to delete a message")
 
-    await card.delete_from_channel(bot, review)  # must not raise
+    result = await card.delete_from_channel(bot, review)  # must not raise
+
+    assert result is False
+
+
+async def test_delete_from_channel_treats_an_already_gone_post_as_done() -> None:
+    """A double-run, or someone deleting the post by hand — either way the post is
+    already gone, which is the end state this function exists to reach, so it must
+    not be retried forever."""
+    review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
+    bot = FakeBot(fail_message="message to delete not found")
+
+    result = await card.delete_from_channel(bot, review)
+
+    assert result is True

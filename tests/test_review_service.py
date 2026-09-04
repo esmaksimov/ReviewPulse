@@ -326,6 +326,37 @@ async def test_two_approvals_close_the_review(session) -> None:
     assert review.is_closed
 
 
+async def test_channel_cleanup_only_picks_up_reviews_past_the_cutoff(session) -> None:
+    """`scheduler.jobs.channel_cleanup_tick` passes `now - channel_cleanup_delay` as
+    the cutoff — a review closed more recently than that must wait its turn."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+    assert review.is_closed
+
+    too_soon = await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(27, 9, 0))
+    assert too_soon == []
+
+    due = await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(27, 11, 0))
+    assert due == [review]
+
+
+async def test_channel_cleanup_skips_a_post_already_removed(session) -> None:
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+    review.channel_post_deleted_at = msk(27, 12, 0)
+
+    assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
+
+
+async def test_channel_cleanup_skips_a_still_open_review(session) -> None:
+    await make_review(session)
+    assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
+
+
 async def test_a_single_named_reviewer_alone_closes_the_review(session) -> None:
     """Name one reviewer and their approval is enough — don't wait on a second
     verdict that was never coming."""

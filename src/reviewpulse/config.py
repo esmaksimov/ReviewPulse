@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     #: number of reviewers named in the post — list one and their approval is enough,
     #: list two and both must sign off — this only caps it for longer reviewer lists.
     required_approvals: int = Field(default=2, alias="REQUIRED_APPROVALS")
+    #: How long a closed review's post stays visible in the channel before the bot
+    #: removes it — not immediate, so people still glance at it right after closing.
+    channel_cleanup_delay_hours: int = Field(default=4, alias="CHANNEL_CLEANUP_DELAY_HOURS")
 
     # --- GitLab (feature-flagged; off until a token is issued) --------------
     gitlab_enabled: bool = Field(default=False, alias="GITLAB_ENABLED")
@@ -139,6 +142,10 @@ class Settings(BaseSettings):
     @property
     def nudge_interval(self) -> timedelta:
         return timedelta(minutes=self.nudge_interval_minutes)
+
+    @property
+    def channel_cleanup_delay(self) -> timedelta:
+        return timedelta(hours=self.channel_cleanup_delay_hours)
 
     @property
     def gitlab_configured(self) -> bool:

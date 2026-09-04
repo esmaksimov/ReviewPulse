@@ -87,6 +87,28 @@ async def gitlab_tick(bot: Bot, database: Database, settings: Settings) -> None:
         logger.info("gitlab sync applied %s state changes", len(changes))
 
 
+async def channel_cleanup_tick(bot: Bot, database: Database, settings: Settings) -> None:
+    """Delete a closed review's channel post once it's sat past
+    `Settings.channel_cleanup_delay` — never right on close, so it's still visible
+    for a while. Also how a review closed before this feature ever shipped gets
+    caught up: its `closed_at` is already long past the cutoff, so the very first
+    tick after deploy sweeps it in along with everything closed since.
+    """
+    cutoff = utcnow() - settings.channel_cleanup_delay
+    async with database.session() as session:
+        reviews = await repo.closed_reviews_pending_channel_cleanup(session, cutoff)
+        done = 0
+        for review in reviews:
+            if await card.delete_from_channel(bot, review):
+                review.channel_post_deleted_at = utcnow()
+                done += 1
+            # Left `None` on failure (most likely a missing "Delete messages" right)
+            # so the next tick retries it.
+
+    if reviews:
+        logger.info("channel cleanup removed %s/%s post(s)", done, len(reviews))
+
+
 async def stats_report_tick(bot: Bot, database: Database, settings: Settings) -> None:
     """DM every configured recipient the same digest `/stats` answers on demand.
 
@@ -146,6 +168,16 @@ def build_scheduler(bot: Bot, database: Database, settings: Settings) -> AsyncIO
         )
     else:
         logger.info("GitLab sync disabled — running on card buttons only")
+
+    scheduler.add_job(
+        channel_cleanup_tick,
+        "interval",
+        minutes=15,
+        args=(bot, database, settings),
+        id="channel_cleanup_tick",
+        max_instances=1,
+        coalesce=True,
+    )
 
     if settings.stats_report_recipient_ids:
         scheduler.add_job(

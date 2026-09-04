@@ -115,23 +115,31 @@ def headline(review: Review, locale: str) -> str:
     return " — ".join(parts) if parts else texts.t(locale, "default_headline")
 
 
-async def delete_from_channel(bot: Bot, review: Review) -> None:
-    """Remove the original post from the channel once its review is closed — by
-    reaching quorum or by the manual "Закрыть" button — so the channel only ever
-    shows what's still pending. The discussion thread (comments, this very card) is
-    untouched: it stays as the record, only the channel listing gets decluttered.
+async def delete_from_channel(bot: Bot, review: Review) -> bool:
+    """Remove the original post from the channel — called by
+    `scheduler.jobs.channel_cleanup_tick` once a closed review has sat for
+    `Settings.channel_cleanup_delay`, never right on close, so the post is still
+    visible for a while after it stops being actionable. The discussion thread
+    (comments, this very card) is untouched: it stays as the record, only the
+    channel listing gets decluttered.
 
     Requires the bot to be a channel admin with the "Delete messages" right; without
-    it Telegram just refuses, which is logged and otherwise ignored rather than
-    blocking the close itself. Also silently ignored if the post is already gone
-    (a double-close replay, or someone deleted it by hand) — same "no-op event
-    replays are fine" tolerance as `refresh`.
+    it Telegram refuses, which is logged and returned as `False` — the caller uses
+    that to keep retrying on later ticks, so a backlog clears itself once the right
+    is granted. A post that's already gone (someone deleted it by hand) counts as
+    `True` instead: the end state is the one this function exists to reach, so
+    there's nothing to retry — same "no-op event replays are fine" tolerance as
+    `refresh`, just returning success instead of silently swallowing it.
     """
     if review.channel_chat_id is None or review.channel_message_id is None:
-        return
+        return False
     try:
         await bot.delete_message(
             chat_id=review.channel_chat_id, message_id=review.channel_message_id
         )
     except TelegramBadRequest as exc:
+        if "message to delete not found" in str(exc):
+            return True
         logger.warning("could not delete channel post for review %s: %s", review.id, exc)
+        return False
+    return True

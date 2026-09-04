@@ -507,9 +507,11 @@ migrations/                Alembic
 - **El bot no puede ver las reacciones en la publicación misma** (ver arriba); la
   tarjeta es la fuente de verdad.
 - **Cerrar una revisión borra su publicación del canal** (quórum alcanzado, o el botón
-  "🗄 Cerrar") — el hilo de discusión, con la tarjeta y todos los comentarios, queda
-  intacto; solo se limpia el listado del canal. Requiere que el bot tenga el permiso
-  de administrador **Eliminar mensajes**; sin él, el cierre ocurre igual, pero la
+  "🗄 Cerrar") — no de inmediato, sino `CHANNEL_CLEANUP_DELAY_HOURS` después (4 por
+  defecto), para que siga visible un rato tras cerrarse. El hilo de discusión, con la
+  tarjeta y todos los comentarios, queda intacto; solo se limpia el listado del canal.
+  Requiere que el bot tenga el permiso de administrador **Eliminar mensajes**; sin él,
+  el cierre ocurre igual, pero la
   publicación se queda.
 - **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
   como un día laboral normal.

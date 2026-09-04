@@ -127,6 +127,26 @@ async def open_reviews_with_merge_requests(session: AsyncSession) -> list[Review
     return list(result.scalars().all())
 
 
+async def closed_reviews_pending_channel_cleanup(
+    session: AsyncSession, cutoff: datetime
+) -> list[Review]:
+    """Closed reviews whose channel post hasn't been removed yet and have sat past
+    `cutoff` (`closed_at + Settings.channel_cleanup_delay`) — `channel_cleanup_tick`'s
+    work list. Also how a review closed before this feature existed (`closed_at` far
+    in the past, `channel_post_deleted_at` still `None`) gets swept up on the very
+    first tick after deploy, with no separate backfill needed.
+    """
+    result = await session.execute(
+        select(Review).where(
+            Review.is_closed.is_(True),
+            Review.channel_post_deleted_at.is_(None),
+            Review.closed_at.is_not(None),
+            Review.closed_at <= cutoff,
+        )
+    )
+    return list(result.scalars().all())
+
+
 # --- assignments ------------------------------------------------------------
 
 

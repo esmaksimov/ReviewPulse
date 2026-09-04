@@ -134,6 +134,12 @@ class Review(Base, TimestampMixin):
     #: True once enough reviewers approved (see `services.reviews.approvals_needed`)
     #: or someone closes it by hand.
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    #: Set once `scheduler.jobs.channel_cleanup_tick` actually removes the channel
+    #: post, `Settings.channel_cleanup_delay` after `closed_at` — never immediately,
+    #: so a "closed" post is still visible for a while. `None` both before closing
+    #: and while a close is waiting out that delay; the two are told apart by
+    #: `is_closed` (see `db.repo.closed_reviews_pending_channel_cleanup`).
+    channel_post_deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
 
     assignments: Mapped[list[ReviewerAssignment]] = relationship(
         back_populates="review", cascade="all, delete-orphan", lazy="selectin"

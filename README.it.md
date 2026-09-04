@@ -513,10 +513,11 @@ migrations/                Alembic
 - **Il bot non può vedere le reazioni sul post stesso** (vedi sopra); la card è la
   fonte di verità.
 - **Chiudere una review elimina il suo post dal canale** (quorum raggiunto, o il
-  pulsante "🗄 Chiudi") — il thread di discussione, card e commenti compresi, resta
-  intatto; viene ripulito solo l'elenco del canale. Richiede che il bot abbia il
-  permesso admin **Elimina messaggi**; senza, la chiusura avviene comunque, il post
-  resta soltanto lì.
+  pulsante "🗄 Chiudi") — non subito, ma `CHANNEL_CLEANUP_DELAY_HOURS` dopo (4 di
+  default), così resta visibile ancora un po' dopo la chiusura. Il thread di
+  discussione, card e commenti compresi, resta intatto; viene ripulito solo l'elenco
+  del canale. Richiede che il bot abbia il permesso admin **Elimina messaggi**; senza,
+  la chiusura avviene comunque, il post resta soltanto lì.
 - **I giorni festivi non sono gestiti** — il bot tratterà una festività nazionale
   come un normale giorno lavorativo.
 - **L'analisi dei post riconosce un insieme fisso di parole-etichetta** per campo
