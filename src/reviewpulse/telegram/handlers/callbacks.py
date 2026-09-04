@@ -112,6 +112,10 @@ async def _fixes_done(
     moved = await review_service.mark_fixes_done(session, review)
     if not moved:
         return texts.t(locale, "answer_nothing_to_fix")
+    for assignment in moved:
+        await sender.notify_reviewer_fixes_done(
+            bot, session, review, assignment, settings.default_locale
+        )
     return texts.t(locale, "answer_fixed")
 
 

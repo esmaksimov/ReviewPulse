@@ -141,3 +141,46 @@ async def notify_author_review_approved(
             author.can_be_dmed = False
     except TelegramRetryAfter as exc:
         logger.warning("flood limit, dropping approval notice: retry after %ss", exc.retry_after)
+
+
+async def notify_reviewer_fixes_done(
+    bot: Bot,
+    session: AsyncSession,
+    review: Review,
+    assignment: ReviewerAssignment,
+    default_locale: str,
+) -> None:
+    """Tell a reviewer the author just marked their requested changes as done —
+    they're back on the hook for another look.
+
+    Without this, a reviewer moved to AWAITING_RECHECK finds out only once the SLA
+    nudge fires (`scheduler.jobs.nudge_tick`'s `nudge_stale`), which can be hours
+    later. Called once per moved assignment from both the button path
+    (`handlers.callbacks._fixes_done`) and the GitLab-sync path
+    (`scheduler.jobs.gitlab_tick`, when GitLab reports every thread resolved).
+    """
+    if assignment.telegram_user_id is None:
+        return
+
+    reviewer = await repo.get_user_by_telegram_id(session, assignment.telegram_user_id)
+    if reviewer is not None and not reviewer.can_be_dmed:
+        return
+    locale = resolve_locale(reviewer.locale if reviewer else None, default=default_locale)
+
+    try:
+        await bot.send_message(
+            chat_id=assignment.telegram_user_id,
+            text=texts.reviewer_fixes_done(
+                locale,
+                headline=card.headline(review, locale),
+                review_url=card.review_url(review),
+                merge_request_urls=[link.web_url for link in review.merge_requests],
+            ),
+            disable_web_page_preview=True,
+        )
+    except TelegramForbiddenError:
+        logger.info("reviewer %s cannot be DMed; muting", assignment.telegram_user_id)
+        if reviewer is not None:
+            reviewer.can_be_dmed = False
+    except TelegramRetryAfter as exc:
+        logger.warning("flood limit, dropping fixes-done notice: retry after %ss", exc.retry_after)

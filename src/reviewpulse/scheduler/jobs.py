@@ -20,7 +20,11 @@ from ..i18n import resolve_locale
 from ..services import gitlab_sync, nudges
 from ..services import stats as stats_service
 from ..telegram import card, stats_report
-from ..telegram.sender import TelegramNudgeSender, notify_author_changes_requested
+from ..telegram.sender import (
+    TelegramNudgeSender,
+    notify_author_changes_requested,
+    notify_reviewer_fixes_done,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,19 +61,26 @@ async def gitlab_tick(bot: Bot, database: Database, settings: Settings) -> None:
                     bot, review, settings.required_approvals, settings.default_locale
                 )
 
-        # GitLab can put the ball back on the author on its own (a reviewer reopens a
-        # thread after the fixes landed) — same notice as the card's ✍️ button.
+        # GitLab can move either side of the ball on its own: a reviewer reopens a
+        # thread after the fixes landed (put it back on the author, same notice as
+        # the card's ✍️ button), or every thread gets resolved without anyone
+        # touching the bot (put it back on the reviewer, same notice as the card's
+        # "fixed" button).
         for change in changes:
-            if change.event is not Event.REQUEST_CHANGES:
-                continue
             review = await repo.get_review(session, change.assignment.review_id)
-            if review is not None:
+            if review is None:
+                continue
+            if change.event is Event.REQUEST_CHANGES:
                 await notify_author_changes_requested(
                     bot,
                     session,
                     review,
                     change.assignment.display_label,
                     settings.default_locale,
+                )
+            elif change.event is Event.FIXES_DONE:
+                await notify_reviewer_fixes_done(
+                    bot, session, review, change.assignment, settings.default_locale
                 )
 
     if changes:
