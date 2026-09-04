@@ -101,6 +101,7 @@ async def _verdict(
         )
     if result.review_closed:
         await sender.notify_author_review_approved(bot, session, review, settings.default_locale)
+        await card.delete_from_channel(bot, review)
         return texts.t(locale, "answer_closed_by_approval")
     return texts.t(locale, "answer_approved" if event is Event.APPROVE else "answer_changes")
 
@@ -123,6 +124,8 @@ async def _close(
     session: AsyncSession, review, user, bot: Bot, settings: Settings, locale: str
 ) -> str:
     closed = await review_service.close_review(session, review)
+    if closed:
+        await card.delete_from_channel(bot, review)
     return texts.t(locale, "answer_review_closed" if closed else "answer_already_closed")
 
 

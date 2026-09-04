@@ -28,8 +28,10 @@ Immagine pronta: [`s1k0de/reviewpulse`](https://hub.docker.com/r/s1k0de/reviewpu
 ci sei: `/setprivacy` → **Disable** — altrimenti il bot non vede mai il post che
 Telegram copia automaticamente nel gruppo di discussione.
 
-**2. Aggiungi il bot** come amministratore del canale di review **e** come membro del
-suo gruppo di discussione collegato (i commenti devono essere abilitati).
+**2. Aggiungi il bot** come amministratore del canale di review — con i permessi
+**Pubblica messaggi** (per `/announce`) ed **Elimina messaggi** (così il post di una
+review chiusa sparisce da solo dal canale) — **e** come membro del suo gruppo di
+discussione collegato (i commenti devono essere abilitati).
 
 **3. Avvialo** — scegli quello che si adatta meglio al tuo modo di fare deploy:
 
@@ -510,9 +512,11 @@ migrations/                Alembic
   chiunque nel thread.
 - **Il bot non può vedere le reazioni sul post stesso** (vedi sopra); la card è la
   fonte di verità.
-- **Il post del canale non viene eliminato alla chiusura** — il bot si limita a
-  cambiare la sua card in "✅ Chiuso". Eliminare il post di qualcun altro rompe la
-  cronologia del thread.
+- **Chiudere una review elimina il suo post dal canale** (quorum raggiunto, o il
+  pulsante "🗄 Chiudi") — il thread di discussione, card e commenti compresi, resta
+  intatto; viene ripulito solo l'elenco del canale. Richiede che il bot abbia il
+  permesso admin **Elimina messaggi**; senza, la chiusura avviene comunque, il post
+  resta soltanto lì.
 - **I giorni festivi non sono gestiti** — il bot tratterà una festività nazionale
   come un normale giorno lavorativo.
 - **L'analisi dei post riconosce un insieme fisso di parole-etichetta** per campo

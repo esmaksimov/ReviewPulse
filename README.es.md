@@ -27,8 +27,10 @@ Imagen lista para usar: [`s1k0de/reviewpulse`](https://hub.docker.com/r/s1k0de/r
 estás ahí: `/setprivacy` → **Disable** — de lo contrario el bot nunca ve la
 publicación que Telegram copia automáticamente al grupo de discusión.
 
-**2. Agrega el bot** como administrador del canal de revisión **y** como miembro de su
-grupo de discusión vinculado (los comentarios deben estar habilitados).
+**2. Agrega el bot** como administrador del canal de revisión — con **Publicar
+mensajes** (para `/announce`) y **Eliminar mensajes** (para que la publicación de una
+revisión cerrada desaparezca sola del canal) — **y** como miembro de su grupo de
+discusión vinculado (los comentarios deben estar habilitados).
 
 **3. Ejecútalo** — elige lo que mejor se ajuste a tu forma de desplegar:
 
@@ -504,8 +506,11 @@ migrations/                Alembic
   en el hilo.
 - **El bot no puede ver las reacciones en la publicación misma** (ver arriba); la
   tarjeta es la fuente de verdad.
-- **La publicación del canal no se borra al cerrar** — el bot solo cambia su tarjeta
-  a "✅ Cerrado". Borrar la publicación de otra persona rompe el historial del hilo.
+- **Cerrar una revisión borra su publicación del canal** (quórum alcanzado, o el botón
+  "🗄 Cerrar") — el hilo de discusión, con la tarjeta y todos los comentarios, queda
+  intacto; solo se limpia el listado del canal. Requiere que el bot tenga el permiso
+  de administrador **Eliminar mensajes**; sin él, el cierre ocurre igual, pero la
+  publicación se queda.
 - **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
   como un día laboral normal.
 - **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por

@@ -113,3 +113,25 @@ async def refresh(bot: Bot, review: Review, approvals_cap: int, locale: str) -> 
 def headline(review: Review, locale: str) -> str:
     parts = [part for part in (review.product, review.title) if part]
     return " — ".join(parts) if parts else texts.t(locale, "default_headline")
+
+
+async def delete_from_channel(bot: Bot, review: Review) -> None:
+    """Remove the original post from the channel once its review is closed — by
+    reaching quorum or by the manual "Закрыть" button — so the channel only ever
+    shows what's still pending. The discussion thread (comments, this very card) is
+    untouched: it stays as the record, only the channel listing gets decluttered.
+
+    Requires the bot to be a channel admin with the "Delete messages" right; without
+    it Telegram just refuses, which is logged and otherwise ignored rather than
+    blocking the close itself. Also silently ignored if the post is already gone
+    (a double-close replay, or someone deleted it by hand) — same "no-op event
+    replays are fine" tolerance as `refresh`.
+    """
+    if review.channel_chat_id is None or review.channel_message_id is None:
+        return
+    try:
+        await bot.delete_message(
+            chat_id=review.channel_chat_id, message_id=review.channel_message_id
+        )
+    except TelegramBadRequest as exc:
+        logger.warning("could not delete channel post for review %s: %s", review.id, exc)

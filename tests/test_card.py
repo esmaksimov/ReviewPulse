@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import DeleteMessage
 
 from reviewpulse.db.models import MergeRequestLink, Review, ReviewerAssignment
 from reviewpulse.domain.state import ReviewerState
 from reviewpulse.telegram import card
+
+
+@dataclass
+class FakeBot:
+    """Records `delete_message` calls; `fail` makes it raise like Telegram does when
+    the bot lacks the "Delete messages" right, or the post is already gone."""
+
+    fail: bool = False
+    deleted: list[tuple[int, int]] = field(default_factory=list)
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        if self.fail:
+            raise TelegramBadRequest(
+                method=DeleteMessage(chat_id=chat_id, message_id=message_id),
+                message="message to delete not found",
+            )
+        self.deleted.append((chat_id, message_id))
 
 
 def test_review_url_points_at_the_discussion_thread() -> None:
@@ -89,3 +110,32 @@ def test_render_drops_a_reviewer_removed_by_a_later_edit() -> None:
     text, _ = card.render(review, approvals_cap=2, locale="en")
     assert "@user1" in text
     assert "@user2" not in text
+
+
+async def test_delete_from_channel_removes_the_original_post() -> None:
+    review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
+    bot = FakeBot()
+
+    await card.delete_from_channel(bot, review)
+
+    assert bot.deleted == [(-1001111111111, 42)]
+
+
+async def test_delete_from_channel_is_a_noop_before_the_channel_message_is_known() -> None:
+    """Shouldn't happen for a real review, but a bare `Review()` in a test or a
+    not-yet-flushed row must not crash trying to delete "message None"."""
+    review = Review(id=1, channel_chat_id=None, channel_message_id=None)
+    bot = FakeBot()
+
+    await card.delete_from_channel(bot, review)
+
+    assert bot.deleted == []
+
+
+async def test_delete_from_channel_swallows_a_missing_permission_or_already_gone_post() -> None:
+    """Without the "Delete messages" admin right, or on a double-close replay,
+    Telegram refuses — that must not blow up the close itself."""
+    review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
+    bot = FakeBot(fail=True)
+
+    await card.delete_from_channel(bot, review)  # must not raise

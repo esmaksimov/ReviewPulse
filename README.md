@@ -28,8 +28,10 @@ Prebuilt image: [`s1k0de/reviewpulse`](https://hub.docker.com/r/s1k0de/reviewpul
 you're there: `/setprivacy` → **Disable** — otherwise the bot never sees the post
 Telegram auto-copies into the discussion group.
 
-**2. Add the bot** as an administrator of the review channel **and** as a member of its
-linked discussion group (comments must be enabled).
+**2. Add the bot** as an administrator of the review channel — with **Post messages**
+(for `/announce`) and **Delete messages** (so a closed review's post disappears from
+the channel automatically) — **and** as a member of its linked discussion group
+(comments must be enabled).
 
 **3. Run it** — pick whichever fits how you deploy:
 
@@ -487,8 +489,11 @@ migrations/              Alembic
   doesn't report an author — so the button is available to anyone in the thread.
 - **The bot can't see reactions on the post itself** (see above); the card is the
   source of truth.
-- **The channel post isn't deleted on close** — the bot only flips its card to
-  "✅ Closed". Deleting someone else's post breaks the thread's history.
+- **Closing a review deletes its post from the channel** (quorum reached, or the
+  "🗄 Close" button) — the discussion thread, including the card and every comment,
+  is untouched; only the channel listing gets decluttered. Requires the bot to have
+  the **Delete messages** admin right; without it, the close still happens, the post
+  just stays.
 - **Public holidays aren't accounted for** — the bot will treat a national holiday as
   a normal working day.
 - **Post parsing recognizes a fixed set of label words** per field (see
