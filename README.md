@@ -198,6 +198,10 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(optional, default 2)* — total reviewers on the post, techlead
   included.
 
+Tap **📦 Products** in the bot's menu (or send `/products`) to see this same setup
+without opening the `.env` file — one entry per product, its required reviewer, and
+who's in the pool for the rest.
+
 The author line resolves for free here — unlike a hand-typed post, the composer's
 identity is already known from the DM, with no opt-in tag needed.
 
@@ -415,6 +419,7 @@ production.
 | `/start` | registers you; links your @handle to your id and finds reviews waiting on you |
 | `/status` | what's on you right now, with deadlines and a link to each post |
 | `/announce` | put together the channel post for you — see [Generating the post for you](#generating-the-post-for-you) |
+| `/products` | list configured products, their required reviewer, and their pool |
 | `/link <username>` | link your GitLab account (for Mode B) |
 | `/lang <code>` | switch the bot's language for your own DMs |
 | `/mute 2h`, `/unmute` | go quiet / start reminding again |

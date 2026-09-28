@@ -207,6 +207,10 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(facoltativo, default 2)* — totale dei revisori sul post, techlead
   incluso.
 
+Tocca **📦 Prodotti** nel menu del bot (o invia `/products`) per vedere questa stessa
+configurazione senza aprire `.env` — per ogni prodotto, il revisore obbligatorio e chi
+è nel pool per i posti restanti.
+
 La riga dell'autore qui si risolve gratis — a differenza di un post scritto a mano,
 l'identità di chi lo compone è già nota dal messaggio privato, senza bisogno di
 nessuna etichetta facoltativa.
@@ -436,6 +440,7 @@ silenzio sull'inglese in produzione.
 | `/start` | ti registra; collega il tuo @username al tuo id e trova le review in sospeso su di te |
 | `/status` | cosa è in sospeso su di te adesso, con le scadenze e un link a ogni post |
 | `/announce` | compone il post del canale al posto tuo — vedi [Generare il post per te](#generare-il-post-per-te) |
+| `/products` | elenca i prodotti configurati, il loro revisore obbligatorio e il pool |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
 | `/lang <codice>` | cambia la lingua del bot per i tuoi messaggi privati |
 | `/mute 2h`, `/unmute` | silenzia / riattiva i promemoria |

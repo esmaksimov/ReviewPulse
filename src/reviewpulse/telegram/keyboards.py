@@ -105,20 +105,22 @@ def announce_preview(
 # whole set rather than a single hardcoded string.
 MENU_STATUS_TEXTS = frozenset(texts.t(loc, "btn_menu_status") for loc in SUPPORTED_LOCALES)
 MENU_ANNOUNCE_TEXTS = frozenset(texts.t(loc, "btn_menu_announce") for loc in SUPPORTED_LOCALES)
+MENU_PRODUCTS_TEXTS = frozenset(texts.t(loc, "btn_menu_products") for loc in SUPPORTED_LOCALES)
 MENU_STATS_TEXTS = frozenset(texts.t(loc, "btn_menu_stats") for loc in SUPPORTED_LOCALES)
 
 
 def main_menu(locale: str, *, show_stats: bool) -> ReplyKeyboardMarkup:
-    """The persistent bottom keyboard - Status/Announce always, Stats only for the
-    configured recipients (mirrors the access check `on_stats` makes anyway)."""
+    """The persistent bottom keyboard - Status/Announce/Products always, Stats only
+    for the configured recipients (mirrors the access check `on_stats` makes anyway)."""
     builder = ReplyKeyboardBuilder()
     builder.button(text=texts.t(locale, "btn_menu_status"))
     builder.button(text=texts.t(locale, "btn_menu_announce"))
+    builder.button(text=texts.t(locale, "btn_menu_products"))
     if show_stats:
         builder.button(text=texts.t(locale, "btn_menu_stats"))
-        builder.adjust(2, 1)
+        builder.adjust(2, 2)
     else:
-        builder.adjust(2)
+        builder.adjust(2, 1)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 

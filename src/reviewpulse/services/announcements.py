@@ -82,6 +82,22 @@ def available_products(settings: Settings) -> list[str]:
     return products
 
 
+def product_reviewer_setup(settings: Settings) -> list[ProjectReviewConfig]:
+    """One config per distinct product, in configuration order — the `/products`
+    listing's data source. Every project sharing a product is required to share its
+    whole reviewer setup too (same assumption `ConflictingProjectConfigs` enforces),
+    so the first config seen for each product stands in for all of them.
+    """
+    result: list[ProjectReviewConfig] = []
+    seen: set[str] = set()
+    for config in settings.review_projects.values():
+        if config.product in seen:
+            continue
+        seen.add(config.product)
+        result.append(config)
+    return result
+
+
 def project_for_product(settings: Settings, product: str) -> str | None:
     """A representative `project_path` for `product`, or None if none carries it.
 

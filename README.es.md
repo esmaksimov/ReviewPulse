@@ -204,6 +204,10 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(opcional, por defecto 2)* — total de revisores en la publicación,
   el techlead incluido.
 
+Toca **📦 Productos** en el menú del bot (o envía `/products`) para ver esta misma
+configuración sin abrir el `.env` — por cada producto, su revisor obligatorio y quién
+está en el grupo para el resto de los puestos.
+
 La línea de autor se resuelve gratis aquí — a diferencia de una publicación escrita a
 mano, la identidad de quien redacta ya se conoce por el mensaje privado, sin
 necesidad de ninguna etiqueta opcional.
@@ -431,6 +435,7 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 | `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
 | `/status` | qué tienes pendiente ahora mismo, con plazos y un enlace a cada publicación |
 | `/announce` | redacta la publicación del canal por ti — ver [Generar la publicación por ti](#generar-la-publicación-por-ti) |
+| `/products` | lista los productos configurados, su revisor obligatorio y su grupo |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
 | `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
 | `/mute 2h`, `/unmute` | silenciar / volver a avisar |

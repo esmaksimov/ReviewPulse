@@ -419,6 +419,26 @@ def test_project_for_product_returns_a_representative_configured_path() -> None:
     assert announcements.project_for_product(settings, "Nothing") is None
 
 
+def test_product_reviewer_setup_lists_one_config_per_distinct_product() -> None:
+    """The `/products` listing's data source: several projects can share a product
+    (see `ConflictingProjectConfigs`), and each should surface only once."""
+    settings = make_settings(
+        **{
+            "backend/api": {"product": "Demo A", "techlead": "lead", "pool": ["a", "b"]},
+            "backend/utils": {"product": "Demo A", "techlead": "lead", "pool": ["a", "b"]},
+            "backend/other": {"product": "Demo B", "pool": ["c"]},
+        }
+    )
+    setup = announcements.product_reviewer_setup(settings)
+    assert [config.product for config in setup] == ["Demo A", "Demo B"]
+    assert setup[0].techlead == "lead"
+    assert setup[1].techlead is None
+
+
+def test_product_reviewer_setup_is_empty_when_nothing_is_configured() -> None:
+    assert announcements.product_reviewer_setup(make_settings()) == []
+
+
 async def test_create_draft_without_an_mr_uses_the_product_the_composer_picked(session) -> None:
     settings = make_settings(
         **{"backend/api": {"product": "Demo Product", "techlead": "lead", "pool": ["pool1"]}}

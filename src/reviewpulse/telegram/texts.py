@@ -157,8 +157,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_cancel": "❌ Отмена",
         "btn_menu_status": "📋 Статус",
         "btn_menu_announce": "📢 Анонс",
+        "btn_menu_products": "📦 Продукты",
         "btn_menu_stats": "📊 Статистика",
         "btn_announce_skip": "⏭ Пропустить",
+        "products_header": "<b>Продукты и ревьюверы</b>",
+        "products_required_reviewer": "Обязательный ревьювер: {reviewer}",
+        "products_pool": "Пул на остальные места: {pool}",
+        "products_pool_none": "не задан",
         "announce_step_title": "Как называется задача? Пришли одной строкой.",
         "announce_step_merge_requests": (
             "Ссылки на MR/PR — можно несколько, каждая с новой строки. "
@@ -314,8 +319,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_cancel": "❌ Cancel",
         "btn_menu_status": "📋 Status",
         "btn_menu_announce": "📢 Announce",
+        "btn_menu_products": "📦 Products",
         "btn_menu_stats": "📊 Stats",
         "btn_announce_skip": "⏭ Skip",
+        "products_header": "<b>Products and reviewers</b>",
+        "products_required_reviewer": "Required reviewer: {reviewer}",
+        "products_pool": "Pool for the remaining slot(s): {pool}",
+        "products_pool_none": "not set",
         "announce_step_title": "What is the task called? One line is enough.",
         "announce_step_merge_requests": (
             "MR/PR links — several are fine, one per line. Tap Skip if there aren't any."
@@ -469,8 +479,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_cancel": "❌ Cancelar",
         "btn_menu_status": "📋 Estado",
         "btn_menu_announce": "📢 Anuncio",
+        "btn_menu_products": "📦 Productos",
         "btn_menu_stats": "📊 Estadísticas",
         "btn_announce_skip": "⏭ Omitir",
+        "products_header": "<b>Productos y revisores</b>",
+        "products_required_reviewer": "Revisor obligatorio: {reviewer}",
+        "products_pool": "Grupo para el resto de los puestos: {pool}",
+        "products_pool_none": "no configurado",
         "announce_step_title": "¿Cómo se llama la tarea? Con una línea basta.",
         "announce_step_merge_requests": (
             "Enlaces de MR/PR — pueden ser varios, uno por línea. "
@@ -628,7 +643,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_cancel": "❌ Annulla",
         "btn_menu_status": "📋 Stato",
         "btn_menu_announce": "📢 Annuncio",
+        "btn_menu_products": "📦 Prodotti",
         "btn_menu_stats": "📊 Statistiche",
+        "products_header": "<b>Prodotti e revisori</b>",
+        "products_required_reviewer": "Revisore obbligatorio: {reviewer}",
+        "products_pool": "Pool per i posti restanti: {pool}",
+        "products_pool_none": "non impostato",
         "btn_announce_skip": "⏭ Salta",
         "announce_step_title": "Come si chiama l'attività? Basta una riga.",
         "announce_step_merge_requests": (
@@ -774,7 +794,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_announce_cancel": "❌ 取消",
         "btn_menu_status": "📋 状态",
         "btn_menu_announce": "📢 公告",
+        "btn_menu_products": "📦 产品",
         "btn_menu_stats": "📊 统计",
+        "products_header": "<b>产品与评审人</b>",
+        "products_required_reviewer": "必选评审人：{reviewer}",
+        "products_pool": "其余名额的候选池：{pool}",
+        "products_pool_none": "未设置",
         "btn_announce_skip": "⏭ 跳过",
         "announce_step_title": "任务叫什么？一行就够。",
         "announce_step_merge_requests": "MR/PR 链接——可以多个，每行一个。没有就点「跳过」。",
@@ -993,6 +1018,25 @@ def reviewer_fixes_done(
         lines.append("")
         lines.append(f'<a href="{esc(review_url)}">{t(locale, "nudge_open_discussion")}</a>')
     return "\n".join(lines)
+
+
+def products_list(locale: str, products: list[tuple[str, str | None, list[str]]]) -> str:
+    """`products`: one `(product, techlead_or_None, pool)` tuple per distinct product
+    — built by `services.announcements.product_reviewer_setup`. The empty-products
+    case is the caller's job (`announce_no_products` already says it)."""
+    lines = [t(locale, "products_header"), ""]
+    for product, techlead, pool in products:
+        lines.append(f"<b>{esc(product)}</b>")
+        if techlead:
+            lines.append(t(locale, "products_required_reviewer", reviewer=f"@{esc(techlead)}"))
+        pool_text = (
+            ", ".join(f"@{esc(name)}" for name in pool)
+            if pool
+            else t(locale, "products_pool_none")
+        )
+        lines.append(t(locale, "products_pool", pool=pool_text))
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def humanize(locale: str, delta: timedelta) -> str:

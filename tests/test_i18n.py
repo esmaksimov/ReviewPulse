@@ -142,6 +142,23 @@ def test_reviewer_fixes_done_links_the_review() -> None:
     assert "https://git.example.com/x/-/merge_requests/1" in message
 
 
+def test_products_list_names_the_required_reviewer_and_the_pool() -> None:
+    message = texts.products_list(
+        "en", [("Demo A", "lead", ["alice", "bob"]), ("Demo B", None, [])]
+    )
+    assert "Demo A" in message
+    assert "@lead" in message
+    assert "@alice" in message and "@bob" in message
+    assert "Demo B" in message
+
+
+def test_products_list_omits_the_required_reviewer_line_when_none_is_pinned() -> None:
+    message = texts.products_list("en", [("Demo B", None, [])])
+    assert "Required reviewer" not in message
+    assert "Demo B" in message
+    assert "not set" in message, "an empty pool still gets an explicit placeholder"
+
+
 # --- HTML escaping ----------------------------------------------------------
 #
 # Every message goes out with parse_mode=HTML, so an unescaped "<" in a post title

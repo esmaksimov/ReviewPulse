@@ -23,6 +23,7 @@ from ...domain.escalation import policy_from_settings
 from ...domain.state import ReviewerState
 from ...domain.workhours import calendar_from_settings
 from ...i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
+from ...services import announcements
 from ...services import reviews as review_service
 from ...services import stats as stats_service
 from .. import card, keyboards, stats_report, texts
@@ -115,6 +116,27 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
             )
 
     await message.answer("\n".join(lines), reply_markup=menu, disable_web_page_preview=True)
+
+
+@router.message(Command("products"))
+@router.message(F.text.in_(keyboards.MENU_PRODUCTS_TEXTS))
+async def on_products(message: Message, session: AsyncSession, settings: Settings) -> None:
+    """The REVIEW_PROJECTS setup, grouped by product — the same techlead/pool
+    `/announce` itself draws from, laid out so anyone can check it without actually
+    starting a draft."""
+    locale = await _locale_for(session, message, settings)
+    menu = keyboards.main_menu(
+        locale, show_stats=message.from_user.id in settings.stats_report_recipient_ids
+    )
+    configs = announcements.product_reviewer_setup(settings)
+    if not configs:
+        await message.answer(texts.t(locale, "announce_no_products"), reply_markup=menu)
+        return
+
+    products = [(config.product, config.techlead, config.pool) for config in configs]
+    await message.answer(
+        texts.products_list(locale, products), reply_markup=menu, disable_web_page_preview=True
+    )
 
 
 @router.message(Command("stats"))
