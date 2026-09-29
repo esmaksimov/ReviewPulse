@@ -127,6 +127,43 @@ async def test_create_draft_fails_closed_without_a_configured_project(session) -
     assert exc_info.value.project_path == "backend/api"
 
 
+async def test_create_draft_resolves_a_new_repo_via_a_wildcard_entry(session) -> None:
+    """The exact bug report this fixes: a repo just created under an already-known
+    group ("backend/*") must not need its own REVIEW_PROJECTS line before /announce
+    works on it."""
+    settings = make_settings(
+        **{"backend/*": {"product": "Demo Product", "techlead": "lead", "pool": ["p1"]}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/brand-new-repo/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+    assert draft.product == "Demo Product"
+    assert draft.project_path == "backend/brand-new-repo", "the real path, not the wildcard key"
+
+
+async def test_reroll_resolves_a_wildcard_drafts_config_by_its_real_path(session) -> None:
+    settings = make_settings(
+        **{"backend/*": {"product": "Demo Product", "techlead": "lead", "pool": ["p1", "p2"]}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/brand-new-repo/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+    draft = await announcements.reroll(session, draft, settings)
+    assert repo.draft_pool_picks(draft)[0] in {"p1", "p2"}
+
+
 async def test_create_draft_requires_a_composer_username(session) -> None:
     settings = make_settings(**{"backend/api": {"product": "Demo"}})
     post = parse_post("Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1")
@@ -437,6 +474,49 @@ def test_product_reviewer_setup_lists_one_config_per_distinct_product() -> None:
 
 def test_product_reviewer_setup_is_empty_when_nothing_is_configured() -> None:
     assert announcements.product_reviewer_setup(make_settings()) == []
+
+
+# --- resolve_config (exact match, then longest wildcard prefix) --------------
+
+
+def test_resolve_config_returns_the_exact_entry_when_there_is_one() -> None:
+    settings = make_settings(
+        **{
+            "backend/api": {"product": "Exact"},
+            "backend/*": {"product": "Wildcard"},
+        }
+    )
+    assert announcements.resolve_config(settings, "backend/api").product == "Exact"
+
+
+def test_resolve_config_falls_back_to_a_wildcard_prefix() -> None:
+    """A brand new repo under an already-known group works without anyone adding it
+    to REVIEW_PROJECTS by hand first — the actual bug report this fixes."""
+    settings = make_settings(**{"backend/*": {"product": "Wildcard"}})
+    config = announcements.resolve_config(settings, "backend/brand-new-repo")
+    assert config is not None
+    assert config.product == "Wildcard"
+
+
+def test_resolve_config_prefers_the_longer_more_specific_wildcard() -> None:
+    settings = make_settings(
+        **{
+            "backend/*": {"product": "General"},
+            "backend/payments/*": {"product": "Payments"},
+        }
+    )
+    config = announcements.resolve_config(settings, "backend/payments/gateway")
+    assert config is not None
+    assert config.product == "Payments"
+
+
+def test_resolve_config_does_not_match_a_wildcard_outside_its_prefix() -> None:
+    settings = make_settings(**{"backend/*": {"product": "Wildcard"}})
+    assert announcements.resolve_config(settings, "frontend/app") is None
+
+
+def test_resolve_config_is_none_when_nothing_matches_at_all() -> None:
+    assert announcements.resolve_config(make_settings(), "backend/api") is None
 
 
 async def test_create_draft_without_an_mr_uses_the_product_the_composer_picked(session) -> None:

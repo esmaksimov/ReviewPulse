@@ -31,7 +31,9 @@ plain reply re-anchors the review exactly as if the copy had just arrived fresh.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections import defaultdict
 
 from aiogram import Bot, F, Router
 from aiogram.types import Message
@@ -45,6 +47,18 @@ from .. import card, texts
 logger = logging.getLogger(__name__)
 
 router = Router(name="posts")
+
+#: aiogram's poller hands each update its own DB session (see `DependenciesMiddleware`)
+#: and dispatches updates from the same poll batch concurrently — so the channel post
+#: and its auto-forwarded copy, which Telegram typically delivers within the same
+#: batch, can run `_publish_for` below at the same time. Without this lock both would
+#: read `card_message_id is None` before either had flushed its write, and both would
+#: call `bot.send_message`, leaving an orphan extra card in the discussion thread.
+#: Keyed by `(channel_chat_id, channel_message_id)`, known to both handlers before
+#: either touches the database. Entries are never evicted — one `asyncio.Lock` per
+#: post ever seen is a few dozen bytes, trivial for this bot's traffic over any
+#: realistic uptime.
+_post_locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 @router.channel_post(F.text)
@@ -61,17 +75,20 @@ async def on_channel_post(
         )
         return  # announcements and chatter carry no MR link
 
-    review = await review_service.create_or_update_review(
-        session,
-        channel_chat_id=message.chat.id,
-        channel_message_id=message.message_id,
-        post=post,
-        raw_text=message.text or "",
-        posted_at=message.date,
-        author_label=message.author_signature,
-    )
-    await card.publish(bot, session, review, settings.required_approvals, settings.default_locale)
-    await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
+    async with _post_locks[(message.chat.id, message.message_id)]:
+        review = await review_service.create_or_update_review(
+            session,
+            channel_chat_id=message.chat.id,
+            channel_message_id=message.message_id,
+            post=post,
+            raw_text=message.text or "",
+            posted_at=message.date,
+            author_label=message.author_signature,
+        )
+        await card.publish(
+            bot, session, review, settings.required_approvals, settings.default_locale
+        )
+        await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
 
 
 @router.message(F.is_automatic_forward, F.forward_origin)
@@ -114,20 +131,23 @@ async def _track_discussion_copy(
         )
         return
 
-    review = await review_service.create_or_update_review(
-        session,
-        channel_chat_id=channel_chat_id,
-        channel_message_id=channel_message_id,
-        post=post,
-        raw_text=text,
-        posted_at=copy.date,
-    )
-    review.discussion_chat_id = copy.chat.id
-    review.discussion_message_id = copy.message_id
-    await session.flush()
+    async with _post_locks[(channel_chat_id, channel_message_id)]:
+        review = await review_service.create_or_update_review(
+            session,
+            channel_chat_id=channel_chat_id,
+            channel_message_id=channel_message_id,
+            post=post,
+            raw_text=text,
+            posted_at=copy.date,
+        )
+        review.discussion_chat_id = copy.chat.id
+        review.discussion_message_id = copy.message_id
+        await session.flush()
 
-    await card.publish(bot, session, review, settings.required_approvals, settings.default_locale)
-    await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
+        await card.publish(
+            bot, session, review, settings.required_approvals, settings.default_locale
+        )
+        await _warn_unreachable_reviewers(bot, session, review, settings.default_locale)
 
 
 async def _warn_unreachable_reviewers(

@@ -113,6 +113,34 @@ def project_for_product(settings: Settings, product: str) -> str | None:
     return None
 
 
+def resolve_config(settings: Settings, project_path: str) -> ProjectReviewConfig | None:
+    """`REVIEW_PROJECTS[project_path]`, or — failing that — the longest configured
+    `"<prefix>/*"` entry that `project_path` falls under.
+
+    New repos land in an existing GitLab group/subgroup constantly, and adding each
+    one to `REVIEW_PROJECTS` by hand before `/announce` will touch it is exactly the
+    kind of upkeep this wildcard exists to avoid: one entry like
+    `"subscription/development/*": {...}` covers every repo under that prefix that
+    doesn't have its own more specific entry. An exact entry always wins over a
+    wildcard, and a more specific wildcard (a longer prefix) always wins over a
+    broader one, so `.../ration/*` can disagree with `.../*` for repos under `ration/`.
+    """
+    exact = settings.review_projects.get(project_path)
+    if exact is not None:
+        return exact
+
+    best_prefix = ""
+    best_config: ProjectReviewConfig | None = None
+    for key, config in settings.review_projects.items():
+        if not key.endswith("/*"):
+            continue
+        prefix = key[:-1]  # keep the trailing slash, drop the *
+        if project_path.startswith(prefix) and len(prefix) > len(best_prefix):
+            best_prefix = prefix
+            best_config = config
+    return best_config
+
+
 def resolve_projects(merge_requests: list[MergeRequestRef]) -> list[str]:
     """Every distinct project referenced, in order of first appearance.
 
@@ -194,7 +222,7 @@ async def create_draft(
     else:
         configs: dict[str, ProjectReviewConfig] = {}
         for path in project_paths:
-            config = settings.review_projects.get(path)
+            config = resolve_config(settings, path)
             if config is None:
                 raise ProjectNotConfigured(path)
             configs[path] = config
@@ -227,8 +255,15 @@ async def reroll(
     session: AsyncSession, draft: AnnouncementDraft, settings: Settings
 ) -> AnnouncementDraft:
     """Redraw the non-pinned reviewer slot(s). Repeats across rerolls are fine — no
-    "already shown" tracking, the composer just presses it again if unlucky twice."""
-    config = settings.review_projects[draft.project_path]
+    "already shown" tracking, the composer just presses it again if unlucky twice.
+
+    Goes through `resolve_config`, not a plain dict lookup: `draft.project_path` is
+    the *real* repo path (for traceability), which for a wildcard-resolved draft was
+    never a literal `REVIEW_PROJECTS` key to begin with.
+    """
+    config = resolve_config(settings, draft.project_path)
+    if config is None:
+        raise ProjectNotConfigured(draft.project_path)
     _, picks = pick_reviewers(config, composer_username=draft.composer_username)
     await repo.set_draft_pool_picks(session, draft, picks)
     return draft

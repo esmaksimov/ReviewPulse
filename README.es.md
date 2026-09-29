@@ -204,6 +204,12 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(opcional, por defecto 2)* — total de revisores en la publicación,
   el techlead incluido.
 
+Una clave que termina en `/*`, por ejemplo `"example/*"`, es un valor por defecto para
+ese prefijo: cubre cualquier repositorio de ese grupo/subgrupo de GitLab que no tenga
+su propia entrada, así que un repositorio nuevo funciona con `/announce` de inmediato,
+sin tener que añadirlo antes a mano. Una entrada exacta siempre gana sobre un
+comodín, y un comodín más específico (más largo) siempre gana sobre uno más general.
+
 Toca **📦 Productos** en el menú del bot (o envía `/products`) para ver esta misma
 configuración sin abrir el `.env` — por cada producto, su revisor obligatorio y quién
 está en el grupo para el resto de los puestos.

@@ -207,6 +207,12 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(facoltativo, default 2)* — totale dei revisori sul post, techlead
   incluso.
 
+Una chiave che finisce con `/*`, ad esempio `"example/*"`, è un default per quel
+prefisso: copre qualsiasi repo in quel gruppo/sottogruppo GitLab che non ha una voce
+propria, così un repo appena creato funziona subito con `/announce` senza doverlo
+prima aggiungere a mano. Una voce esatta vince sempre su un wildcard, e un wildcard
+più specifico (più lungo) vince sempre su uno più generico.
+
 Tocca **📦 Prodotti** nel menu del bot (o invia `/products`) per vedere questa stessa
 configurazione senza aprire `.env` — per ogni prodotto, il revisore obbligatorio e chi
 è nel pool per i posti restanti.

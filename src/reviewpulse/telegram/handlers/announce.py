@@ -484,7 +484,13 @@ async def _publish(
 async def _reroll(
     session: AsyncSession, draft: AnnouncementDraft, bot: Bot, settings: Settings, locale: str
 ) -> str:
-    draft = await announcements.reroll(session, draft, settings)
+    try:
+        draft = await announcements.reroll(session, draft, settings)
+    except announcements.ProjectNotConfigured as exc:
+        # REVIEW_PROJECTS lost this entry between the draft's creation and this
+        # reroll — rare (someone edited .env in between), but worth a real message
+        # instead of a silent failure.
+        return texts.t(locale, "announce_project_unconfigured", project=exc.project_path)
     text, markup = announcement.render_preview(
         draft, composer_locale=locale, channel_locale=settings.default_locale
     )

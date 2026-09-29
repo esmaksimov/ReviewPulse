@@ -198,6 +198,12 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 - `reviewer_count` *(optional, default 2)* — total reviewers on the post, techlead
   included.
 
+A key ending in `/*`, e.g. `"example/*"`, is a prefix default: it covers every repo
+under that GitLab group/subgroup that has no entry of its own, so a brand new repo
+works with `/announce` right away instead of needing to be added first. An exact
+entry always wins over a wildcard, and a more specific (longer) wildcard always wins
+over a broader one.
+
 Tap **📦 Products** in the bot's menu (or send `/products`) to see this same setup
 without opening the `.env` file — one entry per product, its required reviewer, and
 who's in the pool for the rest.
