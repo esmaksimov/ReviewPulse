@@ -39,13 +39,19 @@ class ProjectNotConfigured(Exception):
 
 
 class ConflictingProjectConfigs(Exception):
-    """The referenced MRs span projects whose REVIEW_PROJECTS entries disagree.
+    """The referenced MRs span projects whose REVIEW_PROJECTS entries disagree on who
+    reviews.
 
     Real posts routinely name several MRs across several repos in one announcement
-    (`MR API:` / `MR Utils:` / ...) — that's fine as long as every repo involved is
-    configured the same way (same product/techlead/pool/reviewer_count).
-    If they're not, there is no principled way to pick a winner, so this is raised
-    instead of silently using whichever project happened to be named first.
+    (`MR API:` / `MR Utils:` / ...), and often mix an actual service with something
+    like its helm chart — that's fine as long as every repo involved would draw
+    reviewers the same way (same techlead/pool/reviewer_count). `product` is exempt:
+    it's only ever a label on the post, not an input to reviewer selection, so two
+    repos disagreeing on it alone isn't a real conflict — the first-named repo's
+    product is used, same as it already is for everything else "representative".
+    If techlead, pool, or reviewer_count actually disagree, there is no principled
+    way to pick a winner, so this is raised instead of silently using whichever
+    project happened to be named first.
     """
 
     def __init__(self, base_project: str, conflicting_projects: list[str]) -> None:
@@ -228,7 +234,16 @@ async def create_draft(
             configs[path] = config
 
         base_project, base_config = project_paths[0], configs[project_paths[0]]
-        conflicting = [path for path in project_paths[1:] if configs[path] != base_config]
+        # `product` is deliberately left out of this comparison — see
+        # `ConflictingProjectConfigs`'s docstring for why a label-only mismatch
+        # isn't a real conflict.
+        base_reviewers = (base_config.techlead, base_config.pool, base_config.reviewer_count)
+        conflicting = [
+            path
+            for path in project_paths[1:]
+            if (configs[path].techlead, configs[path].pool, configs[path].reviewer_count)
+            != base_reviewers
+        ]
         if conflicting:
             raise ConflictingProjectConfigs(base_project, conflicting)
 

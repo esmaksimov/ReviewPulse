@@ -211,10 +211,12 @@ who's in the pool for the rest.
 The author line resolves for free here — unlike a hand-typed post, the composer's
 identity is already known from the DM, with no opt-in tag needed.
 
-Naming several MR links pulls in several repos at once — fine as long as every one
-of them is configured identically in `REVIEW_PROJECTS`. If two named repos disagree
-(different product, techlead, or pool), the draft is rejected up front with the
-conflicting project names, rather than silently picking one of them.
+Naming several MR links pulls in several repos at once — an actual service and its
+helm chart, say — fine as long as every one of them would draw reviewers the same way
+(same techlead and pool in `REVIEW_PROJECTS`; a differing `product` label alone is not
+a conflict, the first-named repo's is used). If two named repos genuinely disagree on
+who reviews, the draft is rejected up front with the conflicting project names, rather
+than silently picking one of them.
 
 The card that appears in the comment thread under the post:
 
@@ -511,10 +513,11 @@ migrations/              Alembic
 - **Post parsing recognizes a fixed set of label words** per field (see
   [What it looks like](#what-it-looks-like)) — a label outside that list, in any
   language, falls back to positional heuristics rather than being read directly.
-- **`/announce` requires every referenced project to be configured identically** — a
-  draft naming MRs from several repos is fine as long as their `REVIEW_PROJECTS`
-  entries match exactly (product/techlead/pool/reviewer_count); if they don't, the
-  draft is rejected with the conflicting project names rather than picking one.
+- **`/announce` requires every referenced project to draw reviewers the same way** —
+  a draft naming MRs from several repos is fine as long as their `REVIEW_PROJECTS`
+  entries agree on techlead/pool/reviewer_count (a differing `product` label alone is
+  fine); if they don't, the draft is rejected with the conflicting project names
+  rather than picking one.
 - **A half-finished `/announce` doesn't survive a restart** — the step-by-step
   composer keeps its answers in memory, so a redeploy mid-compose means starting
   over. The finished draft is a DB row and is unaffected.

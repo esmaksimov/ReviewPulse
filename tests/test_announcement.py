@@ -270,6 +270,37 @@ async def test_create_draft_rejects_projects_with_disagreeing_configs(session) -
     assert exc_info.value.conflicting_projects == ["backend/checkout"]
 
 
+async def test_create_draft_allows_projects_that_only_disagree_on_product(session) -> None:
+    """The real bug report this fixes: mixing an actual service's MR with, say, its
+    helm chart's MR — same techlead, same pool, different `product` label — used to
+    be rejected even though there is no actual disagreement about who reviews."""
+    settings = make_settings(
+        **{
+            "backend/api_controller": {
+                "product": "Demo A",
+                "techlead": "lead",
+                "pool": ["p1"],
+            },
+            "infra/helm": {"product": "Demo B", "techlead": "lead", "pool": ["p1"]},
+        }
+    )
+    text = (
+        "Title\n\n"
+        "https://git.example.com/backend/api_controller/-/merge_requests/1\n"
+        "https://git.example.com/infra/helm/-/merge_requests/2"
+    )
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+    assert draft.product == "Demo A", "the first-named project's product, as elsewhere"
+    assert [ref.iid for ref in repo.draft_merge_requests(draft)] == [1, 2]
+
+
 async def test_create_draft_fails_closed_when_only_one_of_several_projects_is_configured(
     session,
 ) -> None:

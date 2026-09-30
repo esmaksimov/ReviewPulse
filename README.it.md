@@ -221,10 +221,12 @@ La riga dell'autore qui si risolve gratis — a differenza di un post scritto a 
 l'identità di chi lo compone è già nota dal messaggio privato, senza bisogno di
 nessuna etichetta facoltativa.
 
-Nominare più link a MR coinvolge più repository in una volta sola — va bene, purché
-siano tutti configurati in modo identico in `REVIEW_PROJECTS`. Se due repository
-nominati non coincidono (prodotto, techlead o pool diversi), la bozza viene respinta
-subito con i nomi dei progetti in conflitto, invece di sceglierne uno in silenzio.
+Nominare più link a MR coinvolge più repository in una volta sola — un servizio vero e
+il suo chart helm, ad esempio — va bene, purché tutti scelgano i revisori allo stesso
+modo (stesso techlead e pool in `REVIEW_PROJECTS`; un `product` diverso da solo non
+conta come conflitto — si usa quello del primo repo nominato). Se due repository
+nominati non coincidono davvero su chi fa la review, la bozza viene respinta subito
+con i nomi dei progetti in conflitto, invece di sceglierne uno in silenzio.
 
 La card che compare nel thread dei commenti sotto il post:
 
@@ -535,11 +537,11 @@ migrations/                Alembic
   (vedi [Come si presenta](#come-si-presenta)) — un'etichetta fuori da quell'elenco,
   in qualsiasi lingua, ricade sull'euristica posizionale invece di essere letta
   direttamente.
-- **`/announce` richiede che ogni progetto referenziato sia configurato in modo
-  identico** — una bozza che nomina MR di più repository va bene finché le loro
-  voci in `REVIEW_PROJECTS` coincidono esattamente
-  (prodotto/techlead/pool/reviewer_count); se non coincidono, la bozza viene
-  respinta con i nomi dei progetti in conflitto invece di sceglierne uno.
+- **`/announce` richiede che ogni progetto referenziato scelga i revisori allo stesso
+  modo** — una bozza che nomina MR di più repository va bene finché le loro voci in
+  `REVIEW_PROJECTS` coincidono su techlead/pool/reviewer_count (un `product` diverso
+  da solo non è un problema); se non coincidono, la bozza viene respinta con i nomi
+  dei progetti in conflitto invece di sceglierne uno.
 - **Un `/announce` lasciato a metà non sopravvive a un riavvio** — la procedura
   guidata passo passo tiene le risposte in memoria, quindi un redeploy a metà
   composizione significa ricominciare. La bozza già completata è una riga nel DB e

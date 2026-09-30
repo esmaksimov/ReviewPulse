@@ -218,11 +218,13 @@ La línea de autor se resuelve gratis aquí — a diferencia de una publicación
 mano, la identidad de quien redacta ya se conoce por el mensaje privado, sin
 necesidad de ninguna etiqueta opcional.
 
-Nombrar varios enlaces a MR trae varios repositorios de una vez — está bien siempre
-que todos estén configurados de forma idéntica en `REVIEW_PROJECTS`. Si dos
-repositorios nombrados no coinciden (producto, techlead o pool distintos), el
-borrador se rechaza de entrada con los nombres de los proyectos en conflicto, en vez
-de elegir uno en silencio.
+Nombrar varios enlaces a MR trae varios repositorios de una vez — un servicio real y
+su chart de helm, por ejemplo — está bien siempre que todos vayan a elegir revisores
+de la misma forma (mismo techlead y pool en `REVIEW_PROJECTS`; que el `product`
+difiera por sí solo no cuenta como conflicto — se usa el del primer repo nombrado).
+Si dos repositorios nombrados realmente no coinciden en quién revisa, el borrador se
+rechaza de entrada con los nombres de los proyectos en conflicto, en vez de elegir
+uno en silencio.
 
 La tarjeta que aparece en el hilo de comentarios bajo la publicación:
 
@@ -529,11 +531,11 @@ migrations/                Alembic
 - **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por
   campo (ver [Cómo se ve](#cómo-se-ve)) — una etiqueta fuera de esa lista, en
   cualquier idioma, cae en la heurística posicional en vez de leerse directamente.
-- **`/announce` exige que todos los proyectos referenciados estén configurados de
-  forma idéntica** — un borrador que nombra MRs de varios repositorios está bien
-  siempre que sus entradas en `REVIEW_PROJECTS` coincidan exactamente
-  (producto/techlead/pool/reviewer_count); si no coinciden, el borrador se rechaza
-  con los nombres de los proyectos en conflicto en vez de elegir uno.
+- **`/announce` exige que todos los proyectos referenciados elijan revisores de la
+  misma forma** — un borrador que nombra MRs de varios repositorios está bien siempre
+  que sus entradas en `REVIEW_PROJECTS` coincidan en techlead/pool/reviewer_count (que
+  el `product` difiera por sí solo no es problema); si no coinciden, el borrador se
+  rechaza con los nombres de los proyectos en conflicto en vez de elegir uno.
 - **Un `/announce` a medio terminar no sobrevive a un reinicio** — el asistente
   paso a paso guarda las respuestas en memoria, así que un redeploy a mitad de la
   conversación significa empezar de nuevo. El borrador ya terminado es una fila en
