@@ -124,6 +124,20 @@ MENU_STATS_TEXTS = frozenset(texts.t(loc, "btn_menu_stats") for loc in SUPPORTED
 MENU_ADMINS_TEXTS = frozenset(texts.t(loc, "btn_menu_admins") for loc in SUPPORTED_LOCALES)
 MENU_MANAGE_TEXTS = frozenset(texts.t(loc, "btn_menu_manage") for loc in SUPPORTED_LOCALES)
 
+# Every menu button's text, across every locale. A free-text FSM step (an /announce
+# composer question, a /manage username prompt) must exclude all of these, not just
+# its own trigger — otherwise tapping some *other* menu button mid-flow gets eaten as
+# an answer instead of switching screens, depending on which router happens to be
+# checked first (see each such handler's filter for the concrete case this guards).
+ALL_MENU_TEXTS = (
+    MENU_STATUS_TEXTS
+    | MENU_ANNOUNCE_TEXTS
+    | MENU_PRODUCTS_TEXTS
+    | MENU_STATS_TEXTS
+    | MENU_ADMINS_TEXTS
+    | MENU_MANAGE_TEXTS
+)
+
 
 def main_menu(locale: str, *, show_stats: bool, show_manage: bool) -> ReplyKeyboardMarkup:
     """The persistent bottom keyboard - Status/Announce/Products/Admins always, Stats

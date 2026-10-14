@@ -15,7 +15,7 @@ from reviewpulse.config import Settings
 from reviewpulse.db import repo
 from reviewpulse.services import admin as admin_service
 from reviewpulse.telegram import texts
-from reviewpulse.telegram.handlers import admin
+from reviewpulse.telegram.handlers import admin, build_router
 from reviewpulse.telegram.keyboards import ManageAction, RemoveAdmin, RemovePoolMember
 
 CHAT_ID = 555
@@ -253,3 +253,42 @@ async def test_admin_remove_button_removes_the_tapped_admin(session) -> None:
     assert await admin_service.is_admin(session, SETTINGS, ADMIN_ID) is True, (
         "removing someone else must never strand the acting admin"
     )
+
+
+# --- a menu button mid-flow must switch screens, not be read as input -----------
+
+
+async def test_tapping_the_announce_button_while_mid_pool_add_switches_to_announce(
+    session,
+) -> None:
+    """Regression for a real production report: a tap on a *different* menu button
+    while `/manage` was waiting for a pool username got read as an (invalid)
+    username instead of switching screens. `on_pool_username`/`on_admin_username`
+    only excluded slash commands, not other menu buttons, and `admin.router` is
+    checked ahead of `announce.router` in the real dispatch chain — so the state
+    handler swallowed the tap before `/announce`'s own entry point ever saw it.
+
+    This drives the actual router tree (`build_router`), not the handler function
+    directly — the bug is about dispatch/filter precedence between two different
+    routers, which calling a handler by hand can never exercise."""
+    router = build_router()
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_ask_pool_username")
+
+    announce_button = FakeMessage(chat, text=texts.t("ru", "btn_menu_announce"))
+    await router.propagate_event(
+        "message",
+        announce_button,
+        state=state,
+        session=session,
+        settings=SETTINGS,
+        bot=object(),  # only `Command`/`CommandStart` filters need it, and they
+        # reject our non-`Message` fakes before ever touching it
+        raw_state=await state.get_state(),
+    )
+
+    assert chat.last_text() == texts.t("ru", "announce_step_title")
+    assert await state.get_state() == "Compose:title"

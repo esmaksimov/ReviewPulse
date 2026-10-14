@@ -199,7 +199,9 @@ async def on_announce(
 # --- one step per answer ------------------------------------------------------
 
 
-@router.message(Compose.title, F.text, ~F.text.startswith("/"))
+@router.message(
+    Compose.title, F.text, ~F.text.startswith("/"), ~F.text.in_(keyboards.ALL_MENU_TEXTS)
+)
 async def on_title(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
@@ -215,7 +217,9 @@ async def on_title(
     )
 
 
-@router.message(Compose.merge_requests, F.text, ~F.text.startswith("/"))
+@router.message(
+    Compose.merge_requests, F.text, ~F.text.startswith("/"), ~F.text.in_(keyboards.ALL_MENU_TEXTS)
+)
 async def on_merge_requests(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
@@ -236,7 +240,9 @@ async def on_merge_requests(
     await _ask(message, state, Compose.docs, "announce_step_docs", locale, can_skip=True)
 
 
-@router.message(Compose.docs, F.text, ~F.text.startswith("/"))
+@router.message(
+    Compose.docs, F.text, ~F.text.startswith("/"), ~F.text.in_(keyboards.ALL_MENU_TEXTS)
+)
 async def on_docs(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
@@ -250,7 +256,9 @@ async def on_docs(
     await _ask(message, state, Compose.task, "announce_step_task", locale, can_skip=True)
 
 
-@router.message(Compose.description, F.text, ~F.text.startswith("/"))
+@router.message(
+    Compose.description, F.text, ~F.text.startswith("/"), ~F.text.in_(keyboards.ALL_MENU_TEXTS)
+)
 async def on_description(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
@@ -259,7 +267,9 @@ async def on_description(
     await _ask(message, state, Compose.task, "announce_step_task", locale, can_skip=True)
 
 
-@router.message(Compose.task, F.text, ~F.text.startswith("/"))
+@router.message(
+    Compose.task, F.text, ~F.text.startswith("/"), ~F.text.in_(keyboards.ALL_MENU_TEXTS)
+)
 async def on_task(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:

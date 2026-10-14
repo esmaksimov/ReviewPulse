@@ -136,7 +136,12 @@ async def on_manage_action(
     await query.answer()
 
 
-@router.message(ManageFlow.pool_username, F.text, ~F.text.startswith("/"))
+@router.message(
+    ManageFlow.pool_username,
+    F.text,
+    ~F.text.startswith("/"),
+    ~F.text.in_(keyboards.ALL_MENU_TEXTS),
+)
 async def on_pool_username(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
@@ -155,7 +160,12 @@ async def on_pool_username(
     await message.answer(texts.t(locale, key, username=username))
 
 
-@router.message(ManageFlow.admin_username, F.text, ~F.text.startswith("/"))
+@router.message(
+    ManageFlow.admin_username,
+    F.text,
+    ~F.text.startswith("/"),
+    ~F.text.in_(keyboards.ALL_MENU_TEXTS),
+)
 async def on_admin_username(
     message: Message, state: FSMContext, session: AsyncSession, settings: Settings
 ) -> None:
