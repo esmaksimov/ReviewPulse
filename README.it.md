@@ -197,13 +197,12 @@ La selezione dei revisori si configura via ambiente, una voce per ogni progetto
 GitLab, con la stessa chiave `project_path` che un link a una MR porta già con sé:
 
 ```dotenv
-REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","reviewer_count":2}}
 ```
 
 - `product` — mostrato sul post generato.
 - `techlead` *(facoltativo)* — sempre incluso, a meno che non sia proprio lui a
   lanciare `/announce`.
-- `pool` — candidati per i posti rimanenti, estratti a caso, escluso chi lo compone.
 - `reviewer_count` *(facoltativo, default 2)* — totale dei revisori sul post, techlead
   incluso.
 
@@ -213,9 +212,11 @@ propria, così un repo appena creato funziona subito con `/announce` senza dover
 prima aggiungere a mano. Una voce esatta vince sempre su un wildcard, e un wildcard
 più specifico (più lungo) vince sempre su uno più generico.
 
-Tocca **📦 Prodotti** nel menu del bot (o invia `/products`) per vedere questa stessa
-configurazione senza aprire `.env` — per ogni prodotto, il revisore obbligatorio e chi
-è nel pool per i posti restanti.
+I posti restanti vengono estratti da **un unico pool condiviso di revisori**, non da
+un elenco per progetto — vedi [Gestione dal bot](#gestione-dal-bot) più sotto. Tocca
+**📦 Prodotti** nel menu del bot (o invia `/products`) per vedere la configurazione di
+`REVIEW_PROJECTS` senza aprire `.env` — per ogni prodotto, il suo revisore
+obbligatorio.
 
 La riga dell'autore qui si risolve gratis — a differenza di un post scritto a mano,
 l'identità di chi lo compone è già nota dal messaggio privato, senza bisogno di
@@ -223,10 +224,21 @@ nessuna etichetta facoltativa.
 
 Nominare più link a MR coinvolge più repository in una volta sola — un servizio vero e
 il suo chart helm, ad esempio — va bene, purché tutti scelgano i revisori allo stesso
-modo (stesso techlead e pool in `REVIEW_PROJECTS`; un `product` diverso da solo non
-conta come conflitto — si usa quello del primo repo nominato). Se due repository
-nominati non coincidono davvero su chi fa la review, la bozza viene respinta subito
-con i nomi dei progetti in conflitto, invece di sceglierne uno in silenzio.
+modo (stesso techlead e reviewer_count in `REVIEW_PROJECTS`; un `product` diverso da
+solo non conta come conflitto — si usa quello del primo repo nominato). Se due
+repository nominati non coincidono davvero su chi fa la review, la bozza viene
+respinta subito con i nomi dei progetti in conflitto, invece di sceglierne uno in
+silenzio.
+
+### Allegare file
+
+L'ultimo passaggio del wizard prima dell'anteprima è **📎 File**: invia una o più foto
+o documenti, poi tocca **✅ Fatto** (oppure saltalo senza allegare nulla). Telegram
+conserva già tutto ciò che viene inviato al bot, quindi non serve configurare nulla in
+più: il bot si limita a tenere il `file_id` di ogni file sulla bozza e lo rinvia come
+messaggio separato subito dopo la pubblicazione del post — un file singolo così com'è,
+più file come un unico album (`send_media_group`, al massimo 10 per il limite stesso
+di Telegram).
 
 La card che compare nel thread dei commenti sotto il post:
 
@@ -441,6 +453,35 @@ silenzio sull'inglese in produzione.
 
 ---
 
+## Gestione dal bot
+
+Due cose si modificano direttamente da Telegram, senza redeploy: **chi ha accesso da
+amministratore** e **il pool condiviso di revisori** da cui pesca `/announce`.
+
+- **`/admins`** — visibile a tutti, elenca chi ha accesso da amministratore in questo
+  momento (la stessa separazione "guardare sì, modificare no" di `/products`).
+- **`/manage`** — solo per amministratori, apre un pannello con quattro azioni:
+  aggiungere/rimuovere un membro del pool di revisori, aggiungere/rimuovere un
+  amministratore. Viene ricontrollato a ogni pressione di pulsante, non solo
+  all'apertura del pannello, nel caso qualcuno ci arrivi riproponendo un vecchio
+  callback o scrivendo a mano il testo di un pulsante.
+
+Aggiungere al pool richiede solo uno `@username` — come una menzione manuale di un
+revisore, viene risolto in modo pigro e non richiede che quella persona abbia mai
+fatto `/start`. Aggiungere un *amministratore* invece sì (l'accesso è identificato
+dall'id numerico Telegram, non dallo username), quindi `/manage` chiede prima alla
+persona di fare `/start` se il bot non la conosce ancora.
+
+Entrambi gli elenchi partono popolati da `ADMIN_USER_IDS` in `.env` — una lista di id
+numerici separati da virgola, consultata solo finché la tabella degli amministratori
+resta vuota. Nel momento in cui il primo amministratore viene aggiunto tramite il bot,
+quella lista nel `.env` smette del tutto di contare — esiste solo come rete di
+sicurezza per l'avvio/il ripristino (primo deploy, o il caso improbabile in cui tutti
+gli amministratori si siano rimossi da soli), non come elenco sempre attivo sotto al
+database.
+
+---
+
 ## Comandi del bot
 
 | Comando | Cosa fa |
@@ -448,7 +489,9 @@ silenzio sull'inglese in produzione.
 | `/start` | ti registra; collega il tuo @username al tuo id e trova le review in sospeso su di te |
 | `/status` | cosa è in sospeso su di te adesso, con le scadenze e un link a ogni post |
 | `/announce` | compone il post del canale al posto tuo — vedi [Generare il post per te](#generare-il-post-per-te) |
-| `/products` | elenca i prodotti configurati, il loro revisore obbligatorio e il pool |
+| `/products` | elenca i prodotti configurati e il loro revisore obbligatorio |
+| `/admins` | chi ha accesso da amministratore in questo momento — vedi [Gestione dal bot](#gestione-dal-bot) |
+| `/manage` | aggiungere/rimuovere membri del pool di revisori e amministratori — solo amministratori |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
 | `/lang <codice>` | cambia la lingua del bot per i tuoi messaggi privati |
 | `/mute 2h`, `/unmute` | silenzia / riattiva i promemoria |
@@ -464,7 +507,7 @@ poetry install
 cp .env.example .env                # compila BOT_TOKEN
 poetry run python -m reviewpulse    # le migrazioni si applicano da sole all'avvio
 
-poetry run pytest                   # 240 test
+poetry run pytest                   # 308 test
 poetry run ruff check src tests
 ```
 
@@ -539,7 +582,7 @@ migrations/                Alembic
   direttamente.
 - **`/announce` richiede che ogni progetto referenziato scelga i revisori allo stesso
   modo** — una bozza che nomina MR di più repository va bene finché le loro voci in
-  `REVIEW_PROJECTS` coincidono su techlead/pool/reviewer_count (un `product` diverso
+  `REVIEW_PROJECTS` coincidono su techlead/reviewer_count (un `product` diverso
   da solo non è un problema); se non coincidono, la bozza viene respinta con i nomi
   dei progetti in conflitto invece di sceglierne uno.
 - **Un `/announce` lasciato a metà non sopravvive a un riavvio** — la procedura

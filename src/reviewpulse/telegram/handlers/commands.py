@@ -23,6 +23,7 @@ from ...domain.escalation import policy_from_settings
 from ...domain.state import ReviewerState
 from ...domain.workhours import calendar_from_settings
 from ...i18n import SUPPORTED_LOCALES, normalize_locale, resolve_locale
+from ...services import admin as admin_service
 from ...services import announcements
 from ...services import reviews as review_service
 from ...services import stats as stats_service
@@ -45,6 +46,18 @@ async def _locale_for(session: AsyncSession, message: Message, settings: Setting
     )
 
 
+async def _menu_for(
+    session: AsyncSession, settings: Settings, telegram_user_id: int, locale: str
+):
+    """The persistent keyboard, with Stats/Management shown only to whoever is
+    actually authorized for each — recomputed on every reply rather than cached,
+    since admin status (and, in principle, the stats recipient list) can change
+    between one message and the next."""
+    show_stats = telegram_user_id in settings.stats_report_recipient_ids
+    show_manage = await admin_service.is_admin(session, settings, telegram_user_id)
+    return keyboards.main_menu(locale, show_stats=show_stats, show_manage=show_manage)
+
+
 @router.message(CommandStart())
 async def on_start(message: Message, session: AsyncSession, settings: Settings) -> None:
     user = message.from_user
@@ -64,8 +77,8 @@ async def on_start(message: Message, session: AsyncSession, settings: Settings) 
         reply += texts.t(locale, "start_found_open", count=linked)
     if linked_authored:
         reply += texts.t(locale, "start_found_authored", count=linked_authored)
-    show_stats = user.id in settings.stats_report_recipient_ids
-    await message.answer(reply, reply_markup=keyboards.main_menu(locale, show_stats=show_stats))
+    menu = await _menu_for(session, settings, user.id, locale)
+    await message.answer(reply, reply_markup=menu)
 
 
 @router.message(Command("status"))
@@ -74,9 +87,7 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
     locale = await _locale_for(session, message, settings)
     # Also how a user who /start'ed before this menu existed picks up the keyboard -
     # it isn't resent on every reply, only wherever it's attached explicitly.
-    menu = keyboards.main_menu(
-        locale, show_stats=message.from_user.id in settings.stats_report_recipient_ids
-    )
+    menu = await _menu_for(session, settings, message.from_user.id, locale)
     assignments = await repo.assignments_for_user(session, message.from_user.id)
     authored = await repo.reviews_awaiting_author(session, message.from_user.id)
     if not assignments and not authored:
@@ -121,19 +132,18 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
 @router.message(Command("products"))
 @router.message(F.text.in_(keyboards.MENU_PRODUCTS_TEXTS))
 async def on_products(message: Message, session: AsyncSession, settings: Settings) -> None:
-    """The REVIEW_PROJECTS setup, grouped by product — the same techlead/pool
-    `/announce` itself draws from, laid out so anyone can check it without actually
+    """The REVIEW_PROJECTS setup, grouped by product, plus the shared reviewer pool
+    `/announce` itself draws from — laid out so anyone can check it without actually
     starting a draft."""
     locale = await _locale_for(session, message, settings)
-    menu = keyboards.main_menu(
-        locale, show_stats=message.from_user.id in settings.stats_report_recipient_ids
-    )
+    menu = await _menu_for(session, settings, message.from_user.id, locale)
     configs = announcements.product_reviewer_setup(settings)
     if not configs:
         await message.answer(texts.t(locale, "announce_no_products"), reply_markup=menu)
         return
 
-    products = [(config.product, config.techlead, config.pool) for config in configs]
+    pool = await admin_service.pool_usernames(session)
+    products = [(config.product, config.techlead, pool) for config in configs]
     await message.answer(
         texts.products_list(locale, products), reply_markup=menu, disable_web_page_preview=True
     )

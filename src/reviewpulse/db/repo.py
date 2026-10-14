@@ -15,10 +15,12 @@ from ..parsing.gitlab_url import MergeRequestRef
 from .models import (
     AnnouncementDraft,
     AssignmentTransition,
+    BotAdmin,
     MergeRequestLink,
     NudgeLog,
     Review,
     ReviewerAssignment,
+    ReviewerPoolMember,
     User,
     utcnow,
 )
@@ -341,6 +343,85 @@ async def transitions_between(
     return list(result.scalars().all())
 
 
+# --- bot admins ---------------------------------------------------------------
+
+
+async def list_admins(session: AsyncSession) -> list[BotAdmin]:
+    result = await session.execute(select(BotAdmin).order_by(BotAdmin.created_at))
+    return list(result.scalars().all())
+
+
+async def is_db_admin(session: AsyncSession, telegram_user_id: int) -> bool:
+    result = await session.execute(
+        select(BotAdmin.id).where(BotAdmin.telegram_user_id == telegram_user_id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def add_admin(
+    session: AsyncSession, *, telegram_user_id: int, username: str | None, added_by_user_id: int
+) -> BotAdmin | None:
+    """`None` if already an admin — the caller treats that as a no-op, not an error."""
+    if await is_db_admin(session, telegram_user_id):
+        return None
+    admin = BotAdmin(
+        telegram_user_id=telegram_user_id, username=username, added_by_user_id=added_by_user_id
+    )
+    session.add(admin)
+    await session.flush()
+    return admin
+
+
+async def remove_admin(session: AsyncSession, telegram_user_id: int) -> bool:
+    result = await session.execute(
+        select(BotAdmin).where(BotAdmin.telegram_user_id == telegram_user_id)
+    )
+    admin = result.scalar_one_or_none()
+    if admin is None:
+        return False
+    await session.delete(admin)
+    await session.flush()
+    return True
+
+
+# --- reviewer pool --------------------------------------------------------------
+
+
+async def list_pool_members(session: AsyncSession) -> list[ReviewerPoolMember]:
+    result = await session.execute(
+        select(ReviewerPoolMember).order_by(ReviewerPoolMember.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_pool_member(session: AsyncSession, username: str) -> ReviewerPoolMember | None:
+    result = await session.execute(
+        select(ReviewerPoolMember).where(ReviewerPoolMember.username.ilike(username))
+    )
+    return result.scalars().first()
+
+
+async def add_pool_member(
+    session: AsyncSession, *, username: str, added_by_user_id: int
+) -> ReviewerPoolMember | None:
+    """`None` if already in the pool (case-insensitively) — a no-op, not an error."""
+    if await get_pool_member(session, username) is not None:
+        return None
+    member = ReviewerPoolMember(username=username, added_by_user_id=added_by_user_id)
+    session.add(member)
+    await session.flush()
+    return member
+
+
+async def remove_pool_member(session: AsyncSession, username: str) -> bool:
+    member = await get_pool_member(session, username)
+    if member is None:
+        return False
+    await session.delete(member)
+    await session.flush()
+    return True
+
+
 # --- announcement drafts ------------------------------------------------------
 
 
@@ -359,6 +440,7 @@ async def create_draft(
     merge_requests: list[MergeRequestRef],
     techlead_username: str | None,
     pool_pick_usernames: list[str],
+    attachments: list[dict] | None = None,
 ) -> AnnouncementDraft:
     draft = AnnouncementDraft(
         composer_user_id=composer_user_id,
@@ -373,6 +455,7 @@ async def create_draft(
         merge_requests_json=json.dumps([ref.model_dump() for ref in merge_requests]),
         techlead_username=techlead_username,
         pool_pick_usernames_json=json.dumps(pool_pick_usernames),
+        attachments_json=json.dumps(attachments or []),
     )
     session.add(draft)
     await session.flush()
@@ -413,6 +496,23 @@ def draft_merge_requests(draft: AnnouncementDraft) -> list[MergeRequestRef]:
 
 def draft_pool_picks(draft: AnnouncementDraft) -> list[str]:
     return list(json.loads(draft.pool_pick_usernames_json))
+
+
+async def add_draft_attachment(
+    session: AsyncSession, draft: AnnouncementDraft, *, file_id: str, kind: str
+) -> int:
+    """Appends one file as it arrives — the composer sends them one message at a
+    time, not as a single batch — and returns the new total, for the "added N" ack.
+    """
+    attachments = draft_attachments(draft)
+    attachments.append({"file_id": file_id, "kind": kind})
+    draft.attachments_json = json.dumps(attachments)
+    await session.flush()
+    return len(attachments)
+
+
+def draft_attachments(draft: AnnouncementDraft) -> list[dict]:
+    return list(json.loads(draft.attachments_json))
 
 
 async def record_nudge(

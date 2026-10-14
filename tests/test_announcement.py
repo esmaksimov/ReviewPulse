@@ -30,13 +30,22 @@ def make_settings(channel_id: int | None = None, **projects: dict) -> Settings:
     )
 
 
+async def seed_pool(session, *usernames: str) -> None:
+    """The reviewer pool is DB-backed now (see `services.admin`), not a
+    `REVIEW_PROJECTS` field — a leftover "pool" key in a test's settings dict is
+    harmless but does nothing; this is what actually puts candidates in play for
+    `pick_reviewers`."""
+    for username in usernames:
+        await repo.add_pool_member(session, username=username, added_by_user_id=1)
+
+
 # --- pick_reviewers (pure) ---------------------------------------------------
 
 
 def test_pick_reviewers_includes_techlead_and_fills_pool() -> None:
-    config = ProjectReviewConfig(product="Demo", techlead="lead", pool=["a", "b", "c"])
+    config = ProjectReviewConfig(product="Demo", techlead="lead")
     techlead, picks = announcements.pick_reviewers(
-        config, composer_username="author", rng=random.Random(1)
+        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
     )
     assert techlead == "lead"
     assert len(picks) == 1
@@ -44,9 +53,9 @@ def test_pick_reviewers_includes_techlead_and_fills_pool() -> None:
 
 
 def test_pick_reviewers_excludes_composer_from_the_pool() -> None:
-    config = ProjectReviewConfig(product="Demo", pool=["a", "Author", "b"], reviewer_count=3)
+    config = ProjectReviewConfig(product="Demo", reviewer_count=3)
     _, picks = announcements.pick_reviewers(
-        config, composer_username="author", rng=random.Random(1)
+        config, ["a", "Author", "b"], composer_username="author", rng=random.Random(1)
     )
     assert "Author" not in picks
     assert set(picks) == {"a", "b"}
@@ -54,26 +63,26 @@ def test_pick_reviewers_excludes_composer_from_the_pool() -> None:
 
 def test_pick_reviewers_drops_techlead_slot_when_composer_is_the_techlead() -> None:
     """Case-insensitive: the config might say "Lead", the composer types "lead"."""
-    config = ProjectReviewConfig(product="Demo", techlead="Author", pool=["a", "b", "c"])
+    config = ProjectReviewConfig(product="Demo", techlead="Author")
     techlead, picks = announcements.pick_reviewers(
-        config, composer_username="author", rng=random.Random(1)
+        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
     )
     assert techlead is None
     assert len(picks) == 2
 
 
 def test_pick_reviewers_handles_a_pool_smaller_than_the_requested_count() -> None:
-    config = ProjectReviewConfig(product="Demo", pool=["a"], reviewer_count=3)
+    config = ProjectReviewConfig(product="Demo", reviewer_count=3)
     _, picks = announcements.pick_reviewers(
-        config, composer_username="author", rng=random.Random(1)
+        config, ["a"], composer_username="author", rng=random.Random(1)
     )
     assert picks == ["a"]
 
 
 def test_pick_reviewers_with_no_techlead_draws_the_full_count_from_the_pool() -> None:
-    config = ProjectReviewConfig(product="Demo", pool=["a", "b", "c"], reviewer_count=2)
+    config = ProjectReviewConfig(product="Demo", reviewer_count=2)
     techlead, picks = announcements.pick_reviewers(
-        config, composer_username="author", rng=random.Random(1)
+        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
     )
     assert techlead is None
     assert len(picks) == 2
@@ -148,9 +157,8 @@ async def test_create_draft_resolves_a_new_repo_via_a_wildcard_entry(session) ->
 
 
 async def test_reroll_resolves_a_wildcard_drafts_config_by_its_real_path(session) -> None:
-    settings = make_settings(
-        **{"backend/*": {"product": "Demo Product", "techlead": "lead", "pool": ["p1", "p2"]}}
-    )
+    await seed_pool(session, "p1", "p2")
+    settings = make_settings(**{"backend/*": {"product": "Demo Product", "techlead": "lead"}})
     text = "Title\n\nhttps://git.example.com/backend/brand-new-repo/-/merge_requests/1"
     draft = await announcements.create_draft(
         session,
@@ -179,12 +187,12 @@ async def test_create_draft_requires_a_composer_username(session) -> None:
 
 
 async def test_create_draft_persists_the_resolved_config(session) -> None:
+    await seed_pool(session, "pool1", "pool2")
     settings = make_settings(
         **{
             "backend/api": {
                 "product": "Demo Product",
                 "techlead": "lead",
-                "pool": ["pool1", "pool2"],
                 "reviewer_count": 2,
             }
         }
@@ -326,15 +334,8 @@ async def test_create_draft_fails_closed_when_only_one_of_several_projects_is_co
 
 
 async def test_reroll_redraws_the_pool_but_keeps_the_techlead(session) -> None:
-    settings = make_settings(
-        **{
-            "backend/api": {
-                "product": "Demo",
-                "techlead": "lead",
-                "pool": ["pool1", "pool2", "pool3"],
-            }
-        }
-    )
+    await seed_pool(session, "pool1", "pool2", "pool3")
+    settings = make_settings(**{"backend/api": {"product": "Demo", "techlead": "lead"}})
     text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
     draft = await announcements.create_draft(
         session,
@@ -356,10 +357,22 @@ async def test_reroll_redraws_the_pool_but_keeps_the_techlead(session) -> None:
 @dataclass
 class FakeBot:
     sent: list = field(default_factory=list)
+    photos: list = field(default_factory=list)
+    documents: list = field(default_factory=list)
+    media_groups: list = field(default_factory=list)
 
     async def send_message(self, **kwargs):
         self.sent.append(kwargs)
         return SimpleNamespace(message_id=42)
+
+    async def send_photo(self, chat_id, photo, **kwargs):
+        self.photos.append({"chat_id": chat_id, "photo": photo, **kwargs})
+
+    async def send_document(self, chat_id, document, **kwargs):
+        self.documents.append({"chat_id": chat_id, "document": document, **kwargs})
+
+    async def send_media_group(self, chat_id, media, **kwargs):
+        self.media_groups.append({"chat_id": chat_id, "media": media, **kwargs})
 
 
 async def test_publish_sends_the_rendered_post_and_marks_the_draft_published(session) -> None:
@@ -402,6 +415,81 @@ async def test_publish_fails_closed_without_a_configured_channel(session) -> Non
 
     with pytest.raises(announcements.ChannelNotConfigured):
         await announcements.publish(FakeBot(), session, draft, settings)
+
+
+async def test_publish_sends_a_single_attachment_as_itself(session) -> None:
+    settings = make_settings(
+        channel_id=-100123, **{"backend/api": {"product": "Demo", "techlead": "lead"}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+        attachments=[{"file_id": "doc-1", "kind": "document"}],
+    )
+
+    bot = FakeBot()
+    await announcements.publish(bot, session, draft, settings)
+
+    assert bot.documents == [
+        {"chat_id": -100123, "document": "doc-1", "reply_to_message_id": 42}
+    ]
+    assert bot.photos == []
+    assert bot.media_groups == []
+
+
+async def test_publish_sends_several_attachments_as_one_media_group(session) -> None:
+    settings = make_settings(
+        channel_id=-100123, **{"backend/api": {"product": "Demo", "techlead": "lead"}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+        attachments=[
+            {"file_id": "photo-1", "kind": "photo"},
+            {"file_id": "doc-1", "kind": "document"},
+        ],
+    )
+
+    bot = FakeBot()
+    await announcements.publish(bot, session, draft, settings)
+
+    assert len(bot.media_groups) == 1
+    group = bot.media_groups[0]
+    assert group["chat_id"] == -100123
+    assert group["reply_to_message_id"] == 42
+    assert [item.media for item in group["media"]] == ["photo-1", "doc-1"]
+    assert bot.documents == []
+    assert bot.photos == []
+
+
+async def test_publish_with_no_attachments_sends_nothing_extra(session) -> None:
+    settings = make_settings(
+        channel_id=-100123, **{"backend/api": {"product": "Demo", "techlead": "lead"}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+
+    bot = FakeBot()
+    await announcements.publish(bot, session, draft, settings)
+
+    assert bot.photos == bot.documents == bot.media_groups == []
 
 
 # --- render/parse round trip -----------------------------------------------------
@@ -651,9 +739,8 @@ async def test_generated_post_ingests_the_same_way_a_human_post_would(session) -
     """One level deeper than the round-trip test: actually run it through
     services.reviews.create_or_update_review, the same entry point on_channel_post
     uses for a hand-typed post."""
-    settings = make_settings(
-        **{"backend/api": {"product": "Demo Product", "techlead": "lead", "pool": ["pool1"]}}
-    )
+    await seed_pool(session, "pool1")
+    settings = make_settings(**{"backend/api": {"product": "Demo Product", "techlead": "lead"}})
     text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
     draft = await announcements.create_draft(
         session,

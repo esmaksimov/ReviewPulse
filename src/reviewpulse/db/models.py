@@ -268,6 +268,9 @@ class AnnouncementDraft(Base, TimestampMixin):
     techlead_username: Mapped[str | None] = mapped_column(String(64))
     #: JSON list of usernames — the rerollable slot(s).
     pool_pick_usernames_json: Mapped[str] = mapped_column(Text, default="[]")
+    #: JSON list of {file_id, kind}, kind one of "photo"/"document" — sent as
+    #: follow-ups to the published post (see `services.announcements.publish`).
+    attachments_json: Mapped[str] = mapped_column(Text, default="[]")
 
     published_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
     cancelled_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
@@ -304,6 +307,37 @@ class AssignmentTransition(Base):
 
     assignment: Mapped[ReviewerAssignment] = relationship(lazy="selectin")
     review: Mapped[Review] = relationship(lazy="selectin")
+
+
+class BotAdmin(Base, TimestampMixin):
+    """Someone who can manage the reviewer pool and other admins through the bot.
+
+    DB-backed rather than env-only so admins are fully self-service (see
+    `services.admin`) — `Settings.admin_user_ids` only ever matters as the fallback
+    for when this table is empty (bootstrap, or everyone removed themselves), never
+    as a second source of truth layered on top of it.
+    """
+
+    __tablename__ = "bot_admins"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64))
+    added_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ReviewerPoolMember(Base, TimestampMixin):
+    """One candidate for the non-pinned reviewer slot(s) `/announce` draws from.
+
+    Shared across every product — see `services.announcements.pick_reviewers` — and
+    editable by a `BotAdmin` through the bot instead of a `REVIEW_PROJECTS` redeploy.
+    """
+
+    __tablename__ = "reviewer_pool_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    added_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class NudgeLog(Base):

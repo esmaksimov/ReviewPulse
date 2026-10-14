@@ -80,6 +80,9 @@ def test_the_shipped_env_example_actually_loads() -> None:
 
 
 def test_review_projects_are_parsed_from_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leftover "pool" key (the field moved to a DB-backed shared pool — see
+    `services.admin`) must not break parsing of an old-style entry; pydantic's
+    default `extra="ignore"` just drops it."""
     monkeypatch.setenv("BOT_TOKEN", "t")
     monkeypatch.setenv(
         "REVIEW_PROJECTS",
@@ -90,7 +93,6 @@ def test_review_projects_are_parsed_from_json(monkeypatch: pytest.MonkeyPatch) -
     config = settings.review_projects["backend/api"]
     assert config.product == "Demo"
     assert config.techlead == "user1"
-    assert config.pool == ["user2", "user3"]
     assert config.reviewer_count == 2  # default
 
 

@@ -188,13 +188,12 @@ Reviewer selection is env-configured, one entry per GitLab project, keyed by the
 `project_path` an MR URL already carries:
 
 ```dotenv
-REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","reviewer_count":2}}
 ```
 
 - `product` — shown on the generated post.
 - `techlead` *(optional)* — always included, unless they're the one running
   `/announce`.
-- `pool` — candidates for the remaining slot(s), drawn at random, composer excluded.
 - `reviewer_count` *(optional, default 2)* — total reviewers on the post, techlead
   included.
 
@@ -204,19 +203,30 @@ works with `/announce` right away instead of needing to be added first. An exact
 entry always wins over a wildcard, and a more specific (longer) wildcard always wins
 over a broader one.
 
-Tap **📦 Products** in the bot's menu (or send `/products`) to see this same setup
-without opening the `.env` file — one entry per product, its required reviewer, and
-who's in the pool for the rest.
+The remaining random slot(s) are drawn from **one shared reviewer pool**, not a
+per-project list — see [Admin management](#admin-management) below for how it's
+maintained. Tap **📦 Products** in the bot's menu (or send `/products`) to see the
+`REVIEW_PROJECTS` setup without opening the `.env` file — one entry per product and
+its required reviewer.
 
 The author line resolves for free here — unlike a hand-typed post, the composer's
 identity is already known from the DM, with no opt-in tag needed.
 
 Naming several MR links pulls in several repos at once — an actual service and its
 helm chart, say — fine as long as every one of them would draw reviewers the same way
-(same techlead and pool in `REVIEW_PROJECTS`; a differing `product` label alone is not
-a conflict, the first-named repo's is used). If two named repos genuinely disagree on
-who reviews, the draft is rejected up front with the conflicting project names, rather
-than silently picking one of them.
+(same techlead and reviewer_count in `REVIEW_PROJECTS`; a differing `product` label
+alone is not a conflict, the first-named repo's is used). If two named repos
+genuinely disagree on who reviews, the draft is rejected up front with the
+conflicting project names, rather than silently picking one of them.
+
+### Attaching files
+
+The composer's last step before the preview is **📎 Files** — send one or more photos
+or documents, then tap **✅ Done** (or skip it with no files at all). Telegram already
+stores anything sent to the bot, so nothing extra is set up: the bot just keeps each
+file's `file_id` on the draft and re-sends it as a follow-up message once the post is
+published — a single file as itself, several as one album (`send_media_group`, capped
+at 10 per Telegram's own limit).
 
 The card that appears in the comment thread under the post:
 
@@ -420,6 +430,31 @@ production.
 
 ---
 
+## Admin management
+
+Two things are editable from inside Telegram, no redeploy needed: **who has admin
+access**, and **the shared reviewer pool** `/announce` draws from.
+
+- **`/admins`** — visible to everyone, lists who currently has admin access (the same
+  "look, don't touch" split as `/products`).
+- **`/manage`** — admin-only, opens a panel with four actions: add/remove a reviewer
+  pool member, add/remove an admin. Re-checked on every button press, not just on
+  opening the panel, in case someone reaches it by replaying an old callback or typing
+  a button's label by hand.
+
+Adding to the pool just takes a `@username` — like a hand-typed reviewer mention, it's
+resolved lazily and doesn't require that person to have ever started the bot. Adding
+an *admin* does require it (admin-ness is keyed by their numeric Telegram id, not a
+username), so `/manage` asks the target to `/start` the bot first if they haven't.
+
+Both lists start out seeded from `ADMIN_USER_IDS` in `.env` — a comma-separated list
+of numeric ids, consulted only while the admin table is still empty. The moment the
+first admin is added through the bot, that env list stops mattering at all; it exists
+purely as a bootstrap/recovery fallback (first deploy, or the unlikely case where
+every admin has removed themselves), not an always-on allowlist layered underneath.
+
+---
+
 ## Bot commands
 
 | Command | What it does |
@@ -427,7 +462,9 @@ production.
 | `/start` | registers you; links your @handle to your id and finds reviews waiting on you |
 | `/status` | what's on you right now, with deadlines and a link to each post |
 | `/announce` | put together the channel post for you — see [Generating the post for you](#generating-the-post-for-you) |
-| `/products` | list configured products, their required reviewer, and their pool |
+| `/products` | list configured products and their required reviewer |
+| `/admins` | list who currently has admin access — see [Admin management](#admin-management) |
+| `/manage` | add/remove reviewer pool members and admins — admin-only |
 | `/link <username>` | link your GitLab account (for Mode B) |
 | `/lang <code>` | switch the bot's language for your own DMs |
 | `/mute 2h`, `/unmute` | go quiet / start reminding again |
@@ -443,7 +480,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 240 tests
+poetry run pytest                   # 308 tests
 poetry run ruff check src tests
 ```
 
@@ -515,7 +552,7 @@ migrations/              Alembic
   language, falls back to positional heuristics rather than being read directly.
 - **`/announce` requires every referenced project to draw reviewers the same way** —
   a draft naming MRs from several repos is fine as long as their `REVIEW_PROJECTS`
-  entries agree on techlead/pool/reviewer_count (a differing `product` label alone is
+  entries agree on techlead/reviewer_count (a differing `product` label alone is
   fine); if they don't, the draft is rejected with the conflicting project names
   rather than picking one.
 - **A half-finished `/announce` doesn't survive a restart** — the step-by-step

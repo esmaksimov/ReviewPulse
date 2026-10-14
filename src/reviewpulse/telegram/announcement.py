@@ -92,7 +92,13 @@ def render_preview(
     the literal channel-post text (always `channel_locale` = `Settings.default_locale`,
     so what they approve in the preview is exactly what gets posted)."""
     body = render(draft, channel_locale)
-    text = f"{texts.t(composer_locale, 'announce_preview_intro')}\n\n{body}"
+    intro = texts.t(composer_locale, "announce_preview_intro")
+    attachment_count = len(repo.draft_attachments(draft))
+    if attachment_count:
+        intro += "\n" + texts.t(
+            composer_locale, "announce_preview_attachments", count=attachment_count
+        )
+    text = f"{intro}\n\n{body}"
     has_pool_slot = bool(repo.draft_pool_picks(draft))
     markup = keyboards.announce_preview(draft.id, composer_locale, has_pool_slot=has_pool_slot)
     return text, markup

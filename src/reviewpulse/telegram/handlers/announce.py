@@ -60,6 +60,7 @@ class Compose(StatesGroup):
     docs = State()
     description = State()
     task = State()
+    files = State()
 
 
 async def _locale_for(session: AsyncSession, user: User, settings: Settings) -> str:
@@ -81,6 +82,21 @@ async def _ask(
     await state.set_state(step)
     sent = await message.answer(
         texts.t(locale, key), reply_markup=keyboards.announce_step(locale, can_skip=can_skip)
+    )
+    await state.update_data(prompt_message_id=sent.message_id)
+
+
+async def _ask_files(message: Message, state: FSMContext, locale: str) -> None:
+    """The last step: any number of files, sent one message at a time (see `on_file`),
+    finished by the same "skip" callback every other step uses — just relabelled
+    "Done" here, since by the time this is tapped there may already be files attached.
+    """
+    await state.set_state(Compose.files)
+    sent = await message.answer(
+        texts.t(locale, "announce_step_files"),
+        reply_markup=keyboards.announce_step(
+            locale, can_skip=True, skip_key="btn_announce_files_done"
+        ),
     )
     await state.update_data(prompt_message_id=sent.message_id)
 
@@ -254,7 +270,26 @@ async def on_task(
         return
 
     await state.update_data(task_url=url)
-    await _finish(message, state, session, settings, locale)
+    await _ask_files(message, state, locale)
+
+
+@router.message(Compose.files, F.document | F.photo)
+async def on_file(
+    message: Message, state: FSMContext, session: AsyncSession, settings: Settings
+) -> None:
+    """Stays in `Compose.files` rather than advancing — the composer sends files one
+    at a time for as long as they like, and only the "Done" button (the generic
+    "skip" callback, see `on_step_control`) moves on."""
+    locale = await _locale_for(session, message.from_user, settings)
+    if message.photo:
+        file_id, kind = message.photo[-1].file_id, "photo"
+    else:
+        file_id, kind = message.document.file_id, "document"
+
+    data = await state.get_data()
+    attachments = [*data.get("attachments", []), {"file_id": file_id, "kind": kind}]
+    await state.update_data(attachments=attachments)
+    await message.answer(texts.t(locale, "announce_file_added", count=len(attachments)))
 
 
 # --- skip / cancel / product --------------------------------------------------
@@ -303,6 +338,8 @@ async def on_step_control(
             query.message, state, Compose.task, "announce_step_task", locale, can_skip=True
         )
     elif current == Compose.task.state:
+        await _ask_files(query.message, state, locale)
+    elif current == Compose.files.state:
         await _finish(query.message, state, session, settings, locale, user=query.from_user)
 
 
@@ -350,8 +387,9 @@ async def _finish(
     composer = user or message.from_user
 
     refs = [MergeRequestRef(**item) for item in data.get("merge_requests", [])]
+    attachments = data.get("attachments", [])
     if not any(
-        (refs, data.get("docs_url"), data.get("task_url"), data.get("description"))
+        (refs, data.get("docs_url"), data.get("task_url"), data.get("description"), attachments)
     ):
         await message.answer(texts.t(locale, "announce_nothing_provided"))
         return
@@ -372,6 +410,7 @@ async def _finish(
         parsed=parsed,
         product=data.get("product"),
         description=data.get("description"),
+        attachments=attachments,
         composer=composer,
     )
 
@@ -385,6 +424,7 @@ async def _create_and_preview(
     parsed: ParsedPost,
     product: str | None,
     description: str | None,
+    attachments: list[dict] | None = None,
     composer: User | None = None,
 ) -> None:
     user = composer or message.from_user
@@ -398,6 +438,7 @@ async def _create_and_preview(
             settings=settings,
             product=product,
             description=description,
+            attachments=attachments,
         )
     except announcements.NoMergeRequestFound:
         await message.answer(texts.t(locale, "announce_no_mr"))

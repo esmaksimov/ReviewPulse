@@ -22,14 +22,19 @@ class ProjectReviewConfig(BaseModel):
     Keyed in `Settings.review_projects` by the same `project_path` slug
     `parsing.gitlab_url` already extracts from an MR URL, so resolving "which config
     applies" needs no new parsing.
+
+    The reviewer pool itself is *not* here any more — it used to be a per-project
+    `pool` field, but every project ever configured drew from the exact same list, so
+    it is now one shared, DB-backed pool (`services.admin`) that any bot admin can
+    edit without a redeploy. A `pool` key left over in an old REVIEW_PROJECTS entry is
+    harmless — pydantic just ignores unknown fields — but no longer does anything.
     """
 
     product: str
     #: Always included when set (and not the composer themself) — the "someone senior
     #: always reviews this" slot. Optional: a project with none just draws every
-    #: reviewer from `pool`.
+    #: reviewer from the shared pool.
     techlead: str | None = None
-    pool: list[str] = Field(default_factory=list)
     #: Total reviewers on the generated post, techlead included. Mirrors
     #: REQUIRED_APPROVALS's own default (2) but is set per project, independently.
     reviewer_count: int = 2

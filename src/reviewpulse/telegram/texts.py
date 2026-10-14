@@ -159,11 +159,48 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Анонс",
         "btn_menu_products": "📦 Продукты",
         "btn_menu_stats": "📊 Статистика",
+        "btn_menu_admins": "👑 Админы",
+        "btn_menu_manage": "⚙️ Управление",
         "btn_announce_skip": "⏭ Пропустить",
         "products_header": "<b>Продукты и ревьюверы</b>",
         "products_required_reviewer": "Обязательный ревьювер: {reviewer}",
         "products_pool": "Пул на остальные места: {pool}",
         "products_pool_none": "не задан",
+        "admins_header": "<b>Админы бота</b>",
+        "admins_empty": "Админы не настроены.",
+        "manage_no_access": "Эта команда доступна только админам бота.",
+        "manage_header": "<b>Управление</b>\n\nЧто сделать?",
+        "btn_manage_pool_add": "➕ Добавить в пул",
+        "btn_manage_pool_remove": "➖ Убрать из пула",
+        "btn_manage_admin_add": "➕ Добавить админа",
+        "btn_manage_admin_remove": "➖ Убрать админа",
+        "manage_pool_empty": "Пул пуст — нечего убирать.",
+        "manage_admins_empty": (
+            "Сейчас нет ни одного админа в базе — список берётся из ADMIN_USER_IDS "
+            "в конфиге, убрать их можно только через деплой."
+        ),
+        "manage_ask_pool_username": "Пришли @username, кого добавить в пул ревьюверов.",
+        "manage_ask_admin_username": "Пришли @username, кого сделать админом.",
+        "manage_invalid_username": (
+            "Не похоже на Telegram-юзернейм. Попробуй ещё раз или нажми «Отмена»."
+        ),
+        "manage_pool_added": "✅ @{username} добавлен(а) в пул ревьюверов.",
+        "manage_pool_already": "@{username} уже в пуле.",
+        "manage_pool_removed": "✅ @{username} убран(а) из пула.",
+        "manage_admin_added": "✅ @{username} теперь админ бота.",
+        "manage_admin_already": "@{username} уже админ.",
+        "manage_admin_unknown_user": (
+            "@{username} ещё ни разу не писал(а) боту /start — попроси сначала "
+            "сделать это, потом добавь ещё раз."
+        ),
+        "manage_admin_removed": "✅ Готово, больше не админ.",
+        "manage_cancelled": "Отменено.",
+        "announce_step_files": (
+            "Пришли файлы (документы/фото) по одному. Когда закончишь — нажми «Готово»."
+        ),
+        "btn_announce_files_done": "✅ Готово",
+        "announce_file_added": "Добавлено. Файлов: {count}. Пришли ещё или нажми «Готово».",
+        "announce_preview_attachments": "📎 Приложено файлов: {count}",
         "announce_step_title": "Как называется задача? Пришли одной строкой.",
         "announce_step_merge_requests": (
             "Ссылки на MR/PR — можно несколько, каждая с новой строки. "
@@ -321,11 +358,48 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Announce",
         "btn_menu_products": "📦 Products",
         "btn_menu_stats": "📊 Stats",
+        "btn_menu_admins": "👑 Admins",
+        "btn_menu_manage": "⚙️ Manage",
         "btn_announce_skip": "⏭ Skip",
         "products_header": "<b>Products and reviewers</b>",
         "products_required_reviewer": "Required reviewer: {reviewer}",
         "products_pool": "Pool for the remaining slot(s): {pool}",
         "products_pool_none": "not set",
+        "admins_header": "<b>Bot admins</b>",
+        "admins_empty": "No admins configured.",
+        "manage_no_access": "This is only available to bot admins.",
+        "manage_header": "<b>Manage</b>\n\nWhat would you like to do?",
+        "btn_manage_pool_add": "➕ Add to pool",
+        "btn_manage_pool_remove": "➖ Remove from pool",
+        "btn_manage_admin_add": "➕ Add admin",
+        "btn_manage_admin_remove": "➖ Remove admin",
+        "manage_pool_empty": "The pool is empty — nothing to remove.",
+        "manage_admins_empty": (
+            "There's no admin in the database right now — the list falls back to "
+            "ADMIN_USER_IDS in the config, which can only be changed by redeploying."
+        ),
+        "manage_ask_pool_username": "Send the @username to add to the reviewer pool.",
+        "manage_ask_admin_username": "Send the @username to make an admin.",
+        "manage_invalid_username": (
+            "That doesn't look like a Telegram username. Try again or tap Cancel."
+        ),
+        "manage_pool_added": "✅ @{username} added to the reviewer pool.",
+        "manage_pool_already": "@{username} is already in the pool.",
+        "manage_pool_removed": "✅ @{username} removed from the pool.",
+        "manage_admin_added": "✅ @{username} is now a bot admin.",
+        "manage_admin_already": "@{username} is already an admin.",
+        "manage_admin_unknown_user": (
+            "@{username} has never sent /start to the bot — ask them to do that "
+            "first, then add them again."
+        ),
+        "manage_admin_removed": "✅ Done, no longer an admin.",
+        "manage_cancelled": "Cancelled.",
+        "announce_step_files": (
+            "Send files (documents/photos) one at a time. Tap Done when you're finished."
+        ),
+        "btn_announce_files_done": "✅ Done",
+        "announce_file_added": "Added. Files so far: {count}. Send more or tap Done.",
+        "announce_preview_attachments": "📎 Attached files: {count}",
         "announce_step_title": "What is the task called? One line is enough.",
         "announce_step_merge_requests": (
             "MR/PR links — several are fine, one per line. Tap Skip if there aren't any."
@@ -481,11 +555,51 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Anuncio",
         "btn_menu_products": "📦 Productos",
         "btn_menu_stats": "📊 Estadísticas",
+        "btn_menu_admins": "👑 Administradores",
+        "btn_menu_manage": "⚙️ Gestionar",
         "btn_announce_skip": "⏭ Omitir",
         "products_header": "<b>Productos y revisores</b>",
         "products_required_reviewer": "Revisor obligatorio: {reviewer}",
         "products_pool": "Grupo para el resto de los puestos: {pool}",
         "products_pool_none": "no configurado",
+        "admins_header": "<b>Administradores del bot</b>",
+        "admins_empty": "No hay administradores configurados.",
+        "manage_no_access": "Esto solo está disponible para administradores del bot.",
+        "manage_header": "<b>Gestionar</b>\n\n¿Qué quieres hacer?",
+        "btn_manage_pool_add": "➕ Añadir al grupo",
+        "btn_manage_pool_remove": "➖ Quitar del grupo",
+        "btn_manage_admin_add": "➕ Añadir administrador",
+        "btn_manage_admin_remove": "➖ Quitar administrador",
+        "manage_pool_empty": "El grupo está vacío — no hay nada que quitar.",
+        "manage_admins_empty": (
+            "Ahora mismo no hay ningún administrador en la base de datos — la lista "
+            "recurre a ADMIN_USER_IDS en la configuración, que solo se puede cambiar "
+            "volviendo a desplegar."
+        ),
+        "manage_ask_pool_username": "Envía el @usuario para añadir al grupo de revisores.",
+        "manage_ask_admin_username": "Envía el @usuario para hacerlo administrador.",
+        "manage_invalid_username": (
+            "Eso no parece un nombre de usuario de Telegram. Inténtalo de nuevo o "
+            "pulsa Cancelar."
+        ),
+        "manage_pool_added": "✅ @{username} añadido al grupo de revisores.",
+        "manage_pool_already": "@{username} ya está en el grupo.",
+        "manage_pool_removed": "✅ @{username} quitado del grupo.",
+        "manage_admin_added": "✅ @{username} ya es administrador del bot.",
+        "manage_admin_already": "@{username} ya es administrador.",
+        "manage_admin_unknown_user": (
+            "@{username} nunca le ha enviado /start al bot — pídele que lo haga "
+            "primero y vuelve a añadirlo."
+        ),
+        "manage_admin_removed": "✅ Listo, ya no es administrador.",
+        "manage_cancelled": "Cancelado.",
+        "announce_step_files": (
+            "Envía archivos (documentos/fotos) de uno en uno. Pulsa Listo cuando "
+            "termines."
+        ),
+        "btn_announce_files_done": "✅ Listo",
+        "announce_file_added": "Añadido. Archivos hasta ahora: {count}. Envía más o pulsa Listo.",
+        "announce_preview_attachments": "📎 Archivos adjuntos: {count}",
         "announce_step_title": "¿Cómo se llama la tarea? Con una línea basta.",
         "announce_step_merge_requests": (
             "Enlaces de MR/PR — pueden ser varios, uno por línea. "
@@ -645,10 +759,47 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Annuncio",
         "btn_menu_products": "📦 Prodotti",
         "btn_menu_stats": "📊 Statistiche",
+        "btn_menu_admins": "👑 Admin",
+        "btn_menu_manage": "⚙️ Gestisci",
         "products_header": "<b>Prodotti e revisori</b>",
         "products_required_reviewer": "Revisore obbligatorio: {reviewer}",
         "products_pool": "Pool per i posti restanti: {pool}",
         "products_pool_none": "non impostato",
+        "admins_header": "<b>Admin del bot</b>",
+        "admins_empty": "Nessun admin configurato.",
+        "manage_no_access": "Disponibile solo per gli admin del bot.",
+        "manage_header": "<b>Gestisci</b>\n\nCosa vuoi fare?",
+        "btn_manage_pool_add": "➕ Aggiungi al pool",
+        "btn_manage_pool_remove": "➖ Rimuovi dal pool",
+        "btn_manage_admin_add": "➕ Aggiungi admin",
+        "btn_manage_admin_remove": "➖ Rimuovi admin",
+        "manage_pool_empty": "Il pool è vuoto — niente da rimuovere.",
+        "manage_admins_empty": (
+            "Al momento non c'è nessun admin nel database — l'elenco ricade su "
+            "ADMIN_USER_IDS nella configurazione, modificabile solo con un redeploy."
+        ),
+        "manage_ask_pool_username": "Invia lo @username da aggiungere al pool di revisori.",
+        "manage_ask_admin_username": "Invia lo @username da rendere admin.",
+        "manage_invalid_username": (
+            "Non sembra uno username di Telegram. Riprova oppure premi Annulla."
+        ),
+        "manage_pool_added": "✅ @{username} aggiunto al pool di revisori.",
+        "manage_pool_already": "@{username} è già nel pool.",
+        "manage_pool_removed": "✅ @{username} rimosso dal pool.",
+        "manage_admin_added": "✅ @{username} ora è admin del bot.",
+        "manage_admin_already": "@{username} è già admin.",
+        "manage_admin_unknown_user": (
+            "@{username} non ha mai mandato /start al bot — chiedigli di farlo "
+            "prima, poi aggiungilo di nuovo."
+        ),
+        "manage_admin_removed": "✅ Fatto, non è più admin.",
+        "manage_cancelled": "Annullato.",
+        "announce_step_files": (
+            "Invia i file (documenti/foto) uno alla volta. Premi Fatto quando hai finito."
+        ),
+        "btn_announce_files_done": "✅ Fatto",
+        "announce_file_added": "Aggiunto. File finora: {count}. Invia altri o premi Fatto.",
+        "announce_preview_attachments": "📎 File allegati: {count}",
         "btn_announce_skip": "⏭ Salta",
         "announce_step_title": "Come si chiama l'attività? Basta una riga.",
         "announce_step_merge_requests": (
@@ -796,10 +947,42 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 公告",
         "btn_menu_products": "📦 产品",
         "btn_menu_stats": "📊 统计",
+        "btn_menu_admins": "👑 管理员",
+        "btn_menu_manage": "⚙️ 管理",
         "products_header": "<b>产品与评审人</b>",
         "products_required_reviewer": "必选评审人：{reviewer}",
         "products_pool": "其余名额的候选池：{pool}",
         "products_pool_none": "未设置",
+        "admins_header": "<b>机器人管理员</b>",
+        "admins_empty": "还没有配置管理员。",
+        "manage_no_access": "只有机器人管理员才能使用。",
+        "manage_header": "<b>管理</b>\n\n要做什么？",
+        "btn_manage_pool_add": "➕ 加入候选池",
+        "btn_manage_pool_remove": "➖ 从候选池移除",
+        "btn_manage_admin_add": "➕ 添加管理员",
+        "btn_manage_admin_remove": "➖ 移除管理员",
+        "manage_pool_empty": "候选池是空的，没有可移除的人。",
+        "manage_admins_empty": (
+            "数据库里现在没有任何管理员——列表会退回到配置里的 ADMIN_USER_IDS，"
+            "只能通过重新部署修改。"
+        ),
+        "manage_ask_pool_username": "发送要加入评审候选池的 @用户名。",
+        "manage_ask_admin_username": "发送要设为管理员的 @用户名。",
+        "manage_invalid_username": "这看起来不像 Telegram 用户名。请重试，或点击取消。",
+        "manage_pool_added": "✅ 已把 @{username} 加入评审候选池。",
+        "manage_pool_already": "@{username} 已经在候选池里了。",
+        "manage_pool_removed": "✅ 已把 @{username} 从候选池移除。",
+        "manage_admin_added": "✅ @{username} 现在是机器人管理员了。",
+        "manage_admin_already": "@{username} 已经是管理员了。",
+        "manage_admin_unknown_user": (
+            "@{username} 还没有给机器人发过 /start——请先让对方发一次，然后再重新添加。"
+        ),
+        "manage_admin_removed": "✅ 完成，已不再是管理员。",
+        "manage_cancelled": "已取消。",
+        "announce_step_files": "依次发送文件（文档/图片）。发完后点「完成」。",
+        "btn_announce_files_done": "✅ 完成",
+        "announce_file_added": "已添加，目前共 {count} 个文件。继续发送或点「完成」。",
+        "announce_preview_attachments": "📎 附件数：{count}",
         "btn_announce_skip": "⏭ 跳过",
         "announce_step_title": "任务叫什么？一行就够。",
         "announce_step_merge_requests": "MR/PR 链接——可以多个，每行一个。没有就点「跳过」。",

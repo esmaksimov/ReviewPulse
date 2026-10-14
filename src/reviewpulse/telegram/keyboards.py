@@ -42,6 +42,20 @@ class AnnounceProduct(CallbackData, prefix="ap"):
     index: int
 
 
+class ManageAction(CallbackData, prefix="mg"):
+    """One of the four entry points on the admin-only management panel."""
+
+    action: str  # pool_add | pool_remove | admin_add | admin_remove
+
+
+class RemovePoolMember(CallbackData, prefix="rpm"):
+    username: str
+
+
+class RemoveAdmin(CallbackData, prefix="rad"):
+    telegram_user_id: int
+
+
 def review_card(
     review_id: int, locale: str, *, is_closed: bool, needs_reviewers: bool
 ) -> InlineKeyboardMarkup:
@@ -107,30 +121,40 @@ MENU_STATUS_TEXTS = frozenset(texts.t(loc, "btn_menu_status") for loc in SUPPORT
 MENU_ANNOUNCE_TEXTS = frozenset(texts.t(loc, "btn_menu_announce") for loc in SUPPORTED_LOCALES)
 MENU_PRODUCTS_TEXTS = frozenset(texts.t(loc, "btn_menu_products") for loc in SUPPORTED_LOCALES)
 MENU_STATS_TEXTS = frozenset(texts.t(loc, "btn_menu_stats") for loc in SUPPORTED_LOCALES)
+MENU_ADMINS_TEXTS = frozenset(texts.t(loc, "btn_menu_admins") for loc in SUPPORTED_LOCALES)
+MENU_MANAGE_TEXTS = frozenset(texts.t(loc, "btn_menu_manage") for loc in SUPPORTED_LOCALES)
 
 
-def main_menu(locale: str, *, show_stats: bool) -> ReplyKeyboardMarkup:
-    """The persistent bottom keyboard - Status/Announce/Products always, Stats only
-    for the configured recipients (mirrors the access check `on_stats` makes anyway)."""
+def main_menu(locale: str, *, show_stats: bool, show_manage: bool) -> ReplyKeyboardMarkup:
+    """The persistent bottom keyboard - Status/Announce/Products/Admins always, Stats
+    and Management only for whoever is actually authorized for them (mirrors the
+    access checks `on_stats`/the admin panel make anyway)."""
     builder = ReplyKeyboardBuilder()
     builder.button(text=texts.t(locale, "btn_menu_status"))
     builder.button(text=texts.t(locale, "btn_menu_announce"))
     builder.button(text=texts.t(locale, "btn_menu_products"))
+    builder.button(text=texts.t(locale, "btn_menu_admins"))
     if show_stats:
         builder.button(text=texts.t(locale, "btn_menu_stats"))
-        builder.adjust(2, 2)
-    else:
-        builder.adjust(2, 1)
+    if show_manage:
+        builder.button(text=texts.t(locale, "btn_menu_manage"))
+    extra_row = [int(show_stats) + int(show_manage)] if (show_stats or show_manage) else []
+    builder.adjust(2, 2, *extra_row)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
-def announce_step(locale: str, *, can_skip: bool) -> InlineKeyboardMarkup:
+def announce_step(
+    locale: str, *, can_skip: bool, skip_key: str = "btn_announce_skip"
+) -> InlineKeyboardMarkup:
     """Controls under one composer prompt. Cancel is always available; Skip only on
-    the steps that are genuinely optional (the title never is)."""
+    the steps that are genuinely optional (the title never is). `skip_key` swaps in a
+    differently-worded button for the files step ("Done" reads better there than
+    "Skip" once at least one file has already been sent) without changing what the
+    button actually does — it is still the same `action="skip"` callback."""
     builder = InlineKeyboardBuilder()
     if can_skip:
         builder.button(
-            text=texts.t(locale, "btn_announce_skip"),
+            text=texts.t(locale, skip_key),
             callback_data=AnnounceStep(action="skip"),
         )
     builder.button(
@@ -152,6 +176,53 @@ def announce_products(products: list[str], locale: str) -> InlineKeyboardMarkup:
         callback_data=AnnounceStep(action="cancel"),
     )
     builder.adjust(*([2] * ((len(products) + 1) // 2)), 1)
+    return builder.as_markup()
+
+
+def manage_panel(locale: str) -> InlineKeyboardMarkup:
+    """The admin-only control panel: add/remove on the shared reviewer pool, and on
+    the admin list itself."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=texts.t(locale, "btn_manage_pool_add"),
+        callback_data=ManageAction(action="pool_add"),
+    )
+    builder.button(
+        text=texts.t(locale, "btn_manage_pool_remove"),
+        callback_data=ManageAction(action="pool_remove"),
+    )
+    builder.button(
+        text=texts.t(locale, "btn_manage_admin_add"),
+        callback_data=ManageAction(action="admin_add"),
+    )
+    builder.button(
+        text=texts.t(locale, "btn_manage_admin_remove"),
+        callback_data=ManageAction(action="admin_remove"),
+    )
+    builder.adjust(2, 2)
+    return builder.as_markup()
+
+
+def pool_remove_list(usernames: list[str]) -> InlineKeyboardMarkup:
+    """One button per current pool member — tapping removes that exact person, no
+    free-text typing (and no typos) needed for a removal."""
+    builder = InlineKeyboardBuilder()
+    for username in usernames:
+        builder.button(text=f"@{username}", callback_data=RemovePoolMember(username=username))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def admin_remove_list(admins: list[tuple[int, str | None]]) -> InlineKeyboardMarkup:
+    """One button per current admin — `admins` is `(telegram_user_id, username)`
+    pairs, falling back to the bare id in the label when no username is on file."""
+    builder = InlineKeyboardBuilder()
+    for telegram_user_id, username in admins:
+        label = f"@{username}" if username else str(telegram_user_id)
+        builder.button(
+            text=label, callback_data=RemoveAdmin(telegram_user_id=telegram_user_id)
+        )
+    builder.adjust(1)
     return builder.as_markup()
 
 

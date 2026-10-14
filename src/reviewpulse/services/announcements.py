@@ -20,6 +20,7 @@ from ..db import repo
 from ..db.models import AnnouncementDraft
 from ..parsing.gitlab_url import MergeRequestRef
 from ..parsing.post_parser import ParsedPost
+from . import admin as admin_service
 
 
 class NoMergeRequestFound(Exception):
@@ -45,13 +46,14 @@ class ConflictingProjectConfigs(Exception):
     Real posts routinely name several MRs across several repos in one announcement
     (`MR API:` / `MR Utils:` / ...), and often mix an actual service with something
     like its helm chart — that's fine as long as every repo involved would draw
-    reviewers the same way (same techlead/pool/reviewer_count). `product` is exempt:
-    it's only ever a label on the post, not an input to reviewer selection, so two
-    repos disagreeing on it alone isn't a real conflict — the first-named repo's
-    product is used, same as it already is for everything else "representative".
-    If techlead, pool, or reviewer_count actually disagree, there is no principled
-    way to pick a winner, so this is raised instead of silently using whichever
-    project happened to be named first.
+    reviewers the same way (same techlead/reviewer_count; the pool is shared and
+    DB-backed now, see `services.admin`, so it can no longer differ between
+    projects at all). `product` is exempt too: it's only ever a label on the post,
+    not an input to reviewer selection, so two repos disagreeing on it alone isn't a
+    real conflict — the first-named repo's product is used, same as it already is
+    for everything else "representative". If techlead or reviewer_count actually
+    disagree, there is no principled way to pick a winner, so this is raised instead
+    of silently using whichever project happened to be named first.
     """
 
     def __init__(self, base_project: str, conflicting_projects: list[str]) -> None:
@@ -165,13 +167,18 @@ def resolve_projects(merge_requests: list[MergeRequestRef]) -> list[str]:
 
 def pick_reviewers(
     config: ProjectReviewConfig,
+    pool: list[str],
     *,
     composer_username: str,
     rng: random.Random | None = None,
 ) -> tuple[str | None, list[str]]:
-    """Techlead (if configured, and not the composer) plus a random pool draw for
-    the rest. Returns (techlead_or_None, pool_picks) — `techlead` is never included
-    in `pool_picks`, so a reroll knows exactly which slot(s) it owns.
+    """Techlead (if configured, and not the composer) plus a random draw from `pool`
+    for the rest. Returns (techlead_or_None, pool_picks) — `techlead` is never
+    included in `pool_picks`, so a reroll knows exactly which slot(s) it owns.
+
+    `pool` is the live, DB-backed, shared reviewer list (`services.admin.pool_usernames`)
+    — passed in rather than read off `config` because it is no longer part of
+    `REVIEW_PROJECTS` at all, unlike `techlead`/`reviewer_count` which stay per-project.
 
     The composer reviewing their own post is the same template artefact
     `services.reviews._sync_assignments` already guards against — here it just means
@@ -186,7 +193,7 @@ def pick_reviewers(
         techlead = None
 
     excluded = {composer, (techlead or "").lower()}
-    candidates = [name for name in config.pool if name.lower() not in excluded]
+    candidates = [name for name in pool if name.lower() not in excluded]
     needed = config.reviewer_count - (1 if techlead else 0)
     picks = rng.sample(candidates, k=min(max(needed, 0), len(candidates)))
     return techlead, picks
@@ -202,6 +209,7 @@ async def create_draft(
     settings: Settings,
     product: str | None = None,
     description: str | None = None,
+    attachments: list[dict] | None = None,
 ) -> AnnouncementDraft:
     """Resolve the project(s), draw reviewers, persist the draft.
 
@@ -237,17 +245,17 @@ async def create_draft(
         # `product` is deliberately left out of this comparison — see
         # `ConflictingProjectConfigs`'s docstring for why a label-only mismatch
         # isn't a real conflict.
-        base_reviewers = (base_config.techlead, base_config.pool, base_config.reviewer_count)
+        base_reviewers = (base_config.techlead, base_config.reviewer_count)
         conflicting = [
             path
             for path in project_paths[1:]
-            if (configs[path].techlead, configs[path].pool, configs[path].reviewer_count)
-            != base_reviewers
+            if (configs[path].techlead, configs[path].reviewer_count) != base_reviewers
         ]
         if conflicting:
             raise ConflictingProjectConfigs(base_project, conflicting)
 
-    techlead, picks = pick_reviewers(base_config, composer_username=composer_username)
+    pool = await admin_service.pool_usernames(session)
+    techlead, picks = pick_reviewers(base_config, pool, composer_username=composer_username)
 
     return await repo.create_draft(
         session,
@@ -263,6 +271,7 @@ async def create_draft(
         merge_requests=parsed.merge_requests,
         techlead_username=techlead,
         pool_pick_usernames=picks,
+        attachments=attachments,
     )
 
 
@@ -279,7 +288,8 @@ async def reroll(
     config = resolve_config(settings, draft.project_path)
     if config is None:
         raise ProjectNotConfigured(draft.project_path)
-    _, picks = pick_reviewers(config, composer_username=draft.composer_username)
+    pool = await admin_service.pool_usernames(session)
+    _, picks = pick_reviewers(config, pool, composer_username=draft.composer_username)
     await repo.set_draft_pool_picks(session, draft, picks)
     return draft
 
@@ -287,7 +297,8 @@ async def reroll(
 async def publish(
     bot: Bot, session: AsyncSession, draft: AnnouncementDraft, settings: Settings
 ) -> None:
-    """Post the rendered draft to the channel and mark it published.
+    """Post the rendered draft to the channel, send along any attached files as
+    replies to it, and mark it published.
 
     Deliberately does not catch Telegram exceptions — the handler decides the
     user-facing message (e.g. the bot not being a channel admin yet), and the draft is
@@ -299,7 +310,44 @@ async def publish(
     from ..telegram import announcement  # local import: avoids a cycle (telegram -> services)
 
     text = announcement.render(draft, settings.default_locale)
-    await bot.send_message(
+    sent = await bot.send_message(
         chat_id=settings.channel_id, text=text, disable_web_page_preview=True
     )
+    await _send_attachments(
+        bot, settings.channel_id, repo.draft_attachments(draft), reply_to=sent.message_id
+    )
     await repo.mark_draft_published(session, draft)
+
+
+async def _send_attachments(
+    bot: Bot, chat_id: int, attachments: list[dict], *, reply_to: int
+) -> None:
+    """A single file goes out as itself; two or more go out as one media group (a
+    native Telegram album) so they land together under the post instead of as a
+    string of separate messages. Telegram caps a group at 10 — unlikely to ever be
+    hit here, but chunked defensively rather than failing outright if it is.
+    """
+    if not attachments:
+        return
+
+    from aiogram.types import InputMediaDocument, InputMediaPhoto
+
+    def _media(item: dict):
+        cls = InputMediaPhoto if item["kind"] == "photo" else InputMediaDocument
+        return cls(media=item["file_id"])
+
+    if len(attachments) == 1:
+        item = attachments[0]
+        if item["kind"] == "photo":
+            await bot.send_photo(chat_id, item["file_id"], reply_to_message_id=reply_to)
+        else:
+            await bot.send_document(chat_id, item["file_id"], reply_to_message_id=reply_to)
+        return
+
+    for start in range(0, len(attachments), 10):
+        chunk = attachments[start : start + 10]
+        await bot.send_media_group(
+            chat_id,
+            media=[_media(item) for item in chunk],
+            reply_to_message_id=reply_to if start == 0 else None,
+        )

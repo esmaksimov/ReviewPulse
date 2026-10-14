@@ -193,14 +193,12 @@ La selección de revisores se configura por entorno, una entrada por proyecto de
 GitLab, con la misma clave `project_path` que ya lleva un enlace a un MR:
 
 ```dotenv
-REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","pool":["user2","user3","user4"]}}
+REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"user1","reviewer_count":2}}
 ```
 
 - `product` — se muestra en la publicación generada.
 - `techlead` *(opcional)* — se incluye siempre, salvo que sea quien está ejecutando
   `/announce`.
-- `pool` — candidatos para el resto de plazas, elegidos al azar, excluyendo a quien
-  redacta.
 - `reviewer_count` *(opcional, por defecto 2)* — total de revisores en la publicación,
   el techlead incluido.
 
@@ -210,9 +208,11 @@ su propia entrada, así que un repositorio nuevo funciona con `/announce` de inm
 sin tener que añadirlo antes a mano. Una entrada exacta siempre gana sobre un
 comodín, y un comodín más específico (más largo) siempre gana sobre uno más general.
 
-Toca **📦 Productos** en el menú del bot (o envía `/products`) para ver esta misma
-configuración sin abrir el `.env` — por cada producto, su revisor obligatorio y quién
-está en el grupo para el resto de los puestos.
+Las plazas restantes se sortean de **un único grupo compartido de revisores**, no de
+una lista por proyecto — ver [Gestión desde el bot](#gestión-desde-el-bot) más abajo.
+Toca **📦 Productos** en el menú del bot (o envía `/products`) para ver la
+configuración de `REVIEW_PROJECTS` sin abrir el `.env` — por cada producto, su
+revisor obligatorio.
 
 La línea de autor se resuelve gratis aquí — a diferencia de una publicación escrita a
 mano, la identidad de quien redacta ya se conoce por el mensaje privado, sin
@@ -220,11 +220,21 @@ necesidad de ninguna etiqueta opcional.
 
 Nombrar varios enlaces a MR trae varios repositorios de una vez — un servicio real y
 su chart de helm, por ejemplo — está bien siempre que todos vayan a elegir revisores
-de la misma forma (mismo techlead y pool en `REVIEW_PROJECTS`; que el `product`
-difiera por sí solo no cuenta como conflicto — se usa el del primer repo nombrado).
-Si dos repositorios nombrados realmente no coinciden en quién revisa, el borrador se
-rechaza de entrada con los nombres de los proyectos en conflicto, en vez de elegir
-uno en silencio.
+de la misma forma (mismo techlead y reviewer_count en `REVIEW_PROJECTS`; que el
+`product` difiera por sí solo no cuenta como conflicto — se usa el del primer repo
+nombrado). Si dos repositorios nombrados realmente no coinciden en quién revisa, el
+borrador se rechaza de entrada con los nombres de los proyectos en conflicto, en vez
+de elegir uno en silencio.
+
+### Adjuntar archivos
+
+El último paso del asistente antes de la vista previa es **📎 Archivos**: envía una o
+varias fotos o documentos y luego pulsa **✅ Listo** (o sáltalo sin adjuntar nada).
+Telegram ya guarda todo lo que se le envía al bot, así que no hay que configurar nada
+extra: el bot solo guarda el `file_id` de cada archivo en el borrador y lo reenvía como
+mensaje aparte justo después de publicar el post — un solo archivo tal cual, varios
+como un único álbum (`send_media_group`, con un máximo de 10 por el propio límite de
+Telegram).
 
 La tarjeta que aparece en el hilo de comentarios bajo la publicación:
 
@@ -436,6 +446,36 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 
 ---
 
+## Gestión desde el bot
+
+Hay dos cosas editables directamente en Telegram, sin redeploy: **quién tiene acceso
+de administrador** y **el grupo compartido de revisores** del que se nutre
+`/announce`.
+
+- **`/admins`** — visible para todos, lista quién tiene acceso de administrador ahora
+  mismo (la misma separación "ver sí, tocar no" que `/products`).
+- **`/manage`** — solo para administradores, abre un panel con cuatro acciones:
+  añadir/quitar a alguien del grupo de revisores, añadir/quitar a un administrador. Se
+  vuelve a comprobar en cada pulsación de botón, no solo al abrir el panel, por si
+  alguien llega hasta ahí reenviando un callback antiguo o escribiendo a mano el texto
+  de un botón.
+
+Añadir al grupo de revisores solo necesita un `@usuario` — igual que una mención
+manual de revisor, se resuelve de forma perezosa y no requiere que esa persona haya
+hecho `/start` nunca. Añadir un *administrador* sí lo requiere (el acceso se identifica
+por su id numérico de Telegram, no por el usuario), así que `/manage` pide que el
+destinatario haga `/start` primero si todavía no lo ha hecho.
+
+Ambas listas arrancan sembradas desde `ADMIN_USER_IDS` en `.env` — una lista de ids
+numéricos separados por comas, que solo se consulta mientras la tabla de
+administradores siga vacía. En el momento en que se añade el primer administrador
+desde el bot, esa lista del `.env` deja de importar por completo; existe solo como
+respaldo de arranque/recuperación (el primer despliegue, o el caso poco probable de
+que todos los administradores se hayan quitado a sí mismos), no como una lista
+siempre activa por debajo de la base de datos.
+
+---
+
 ## Comandos del bot
 
 | Comando | Qué hace |
@@ -443,7 +483,9 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 | `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
 | `/status` | qué tienes pendiente ahora mismo, con plazos y un enlace a cada publicación |
 | `/announce` | redacta la publicación del canal por ti — ver [Generar la publicación por ti](#generar-la-publicación-por-ti) |
-| `/products` | lista los productos configurados, su revisor obligatorio y su grupo |
+| `/products` | lista los productos configurados y su revisor obligatorio |
+| `/admins` | quién tiene acceso de administrador ahora mismo — ver [Gestión desde el bot](#gestión-desde-el-bot) |
+| `/manage` | añadir/quitar participantes del grupo de revisores y administradores — solo administradores |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
 | `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
 | `/mute 2h`, `/unmute` | silenciar / volver a avisar |
@@ -459,7 +501,7 @@ poetry install
 cp .env.example .env                # completa BOT_TOKEN
 poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
 
-poetry run pytest                   # 240 pruebas
+poetry run pytest                   # 308 pruebas
 poetry run ruff check src tests
 ```
 
@@ -533,7 +575,7 @@ migrations/                Alembic
   cualquier idioma, cae en la heurística posicional en vez de leerse directamente.
 - **`/announce` exige que todos los proyectos referenciados elijan revisores de la
   misma forma** — un borrador que nombra MRs de varios repositorios está bien siempre
-  que sus entradas en `REVIEW_PROJECTS` coincidan en techlead/pool/reviewer_count (que
+  que sus entradas en `REVIEW_PROJECTS` coincidan en techlead/reviewer_count (que
   el `product` difiera por sí solo no es problema); si no coinciden, el borrador se
   rechaza con los nombres de los proyectos en conflicto en vez de elegir uno.
 - **Un `/announce` a medio terminar no sobrevive a un reinicio** — el asistente

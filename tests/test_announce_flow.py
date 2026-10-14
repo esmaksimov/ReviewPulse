@@ -47,6 +47,16 @@ class FakeLink:
 
 
 @dataclass
+class FakePhotoSize:
+    file_id: str
+
+
+@dataclass
+class FakeDocument:
+    file_id: str
+
+
+@dataclass
 class Chat:
     """Everything the bot said, plus the id counter that makes prompts distinguishable."""
 
@@ -62,13 +72,17 @@ class Chat:
 
 
 class FakeMessage:
-    def __init__(self, chat: Chat, text=None, entities=None, message_id=1):
+    def __init__(
+        self, chat: Chat, text=None, entities=None, message_id=1, photo=None, document=None
+    ):
         self._chat = chat
         self.text = text
         self.entities = entities
         self.from_user = USER
         self.chat = SimpleNamespace(id=CHAT_ID, type="private")
         self.message_id = message_id
+        self.photo = photo
+        self.document = document
 
     async def answer(self, text, reply_markup=None, **kwargs):
         self._chat.next_id += 1
@@ -144,6 +158,17 @@ async def test_the_composer_walks_from_a_button_tap_to_a_ready_draft(session) ->
     await announce.on_task(
         FakeMessage(chat, text="https://tasks.example.com/card/1"), state, session, SETTINGS
     )
+    assert chat.last_text() == texts.t("ru", "announce_step_files")
+    assert await state.get_state() == announce.Compose.files.state
+    files_prompt = chat.last_prompt()  # the ack below is a separate message, no buttons
+
+    await announce.on_file(
+        FakeMessage(chat, photo=[FakePhotoSize("photo-1")]), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "announce_file_added", count=1)
+    await announce.on_step_control(
+        FakeQuery(files_prompt), AnnounceStep(action="skip"), state, session, SETTINGS
+    )  # done adding files, tapped on the original prompt
 
     assert await state.get_state() is None, "the flow ends cleared"
     preview = chat.last_text()
@@ -151,6 +176,11 @@ async def test_the_composer_walks_from_a_button_tap_to_a_ready_draft(session) ->
     assert "Доработка connection pool" in preview
     assert "https://wiki.example.com/pages/1" in preview, "the hidden docs link survived"
     assert "@lead" in preview
+    assert texts.t("ru", "announce_preview_attachments", count=1) in preview
+
+    draft = await repo.get_draft(session, 1)
+    assert draft is not None
+    assert repo.draft_attachments(draft) == [{"file_id": "photo-1", "kind": "photo"}]
 
 
 async def test_a_docs_link_pasted_as_a_hyperlink_reaches_the_saved_draft(session) -> None:
@@ -173,7 +203,8 @@ async def test_a_docs_link_pasted_as_a_hyperlink_reaches_the_saved_draft(session
         session,
         SETTINGS,
     )
-    await skip(chat, state, session)
+    await skip(chat, state, session)  # no task
+    await skip(chat, state, session)  # no files
 
     draft = await repo.get_draft(session, 1)
     assert draft is not None
@@ -214,7 +245,8 @@ async def test_skipping_the_mrs_asks_for_a_product_and_then_a_description(sessio
     )
     assert chat.last_text() == texts.t("ru", "announce_step_task")
 
-    await skip(chat, state, session)
+    await skip(chat, state, session)  # no task
+    await skip(chat, state, session)  # no files
 
     draft = await repo.get_draft(session, 1)
     assert draft is not None
@@ -222,6 +254,33 @@ async def test_skipping_the_mrs_asks_for_a_product_and_then_a_description(sessio
     assert draft.description == "Только SQL, кода нет"
     assert repo.draft_merge_requests(draft) == []
     assert draft.techlead_username == "lead2", "reviewers follow the chosen product"
+
+
+async def test_a_file_alone_is_enough_to_build_a_post(session) -> None:
+    """No MR, no docs, no task, no description — just a screenshot — must still go
+    through: `_finish`'s "nothing provided" check treats an attachment as content."""
+    chat, state = Chat(), new_state()
+    await announce.on_announce_button(FakeMessage(chat), state, session, SETTINGS)
+    await announce.on_title(FakeMessage(chat, text="Заголовок"), state, session, SETTINGS)
+    await skip(chat, state, session)  # no MRs
+    await announce.on_product_chosen(
+        FakeQuery(chat.last_prompt()), AnnounceProduct(index=0), state, session, SETTINGS
+    )
+    await skip(chat, state, session)  # no docs
+    await skip(chat, state, session)  # no description
+    await skip(chat, state, session)  # no task
+    files_prompt = chat.last_prompt()  # the ack below is a separate message, no buttons
+
+    await announce.on_file(
+        FakeMessage(chat, document=FakeDocument("doc-1")), state, session, SETTINGS
+    )
+    await announce.on_step_control(
+        FakeQuery(files_prompt), AnnounceStep(action="skip"), state, session, SETTINGS
+    )  # done adding files, tapped on the original prompt
+
+    draft = await repo.get_draft(session, 1)
+    assert draft is not None
+    assert repo.draft_attachments(draft) == [{"file_id": "doc-1", "kind": "document"}]
 
 
 async def test_skipping_everything_refuses_to_build_an_empty_post(session) -> None:
@@ -235,6 +294,7 @@ async def test_skipping_everything_refuses_to_build_an_empty_post(session) -> No
     await skip(chat, state, session)  # no docs
     await skip(chat, state, session)  # no description
     await skip(chat, state, session)  # no task
+    await skip(chat, state, session)  # no files
 
     assert chat.last_text() == texts.t("ru", "announce_nothing_provided")
     assert await repo.get_draft(session, 1) is None
