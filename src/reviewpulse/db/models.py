@@ -140,6 +140,13 @@ class Review(Base, TimestampMixin):
     #: and while a close is waiting out that delay; the two are told apart by
     #: `is_closed` (see `db.repo.closed_reviews_pending_channel_cleanup`).
     channel_post_deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
+    #: Set instead of `channel_post_deleted_at` when Telegram refuses for a reason no
+    #: amount of retrying fixes — the post is older than the Bot API's 48-hour
+    #: deletion window (see `telegram.card.delete_from_channel`). A review this old
+    #: closing is rare, but once it happens no later tick will ever succeed either, so
+    #: `channel_cleanup_tick` gives up, DMs admins once, and stops retrying instead of
+    #: warning in the logs forever.
+    channel_cleanup_abandoned_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
 
     assignments: Mapped[list[ReviewerAssignment]] = relationship(
         back_populates="review", cascade="all, delete-orphan", lazy="selectin"

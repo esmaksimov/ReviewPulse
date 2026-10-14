@@ -137,11 +137,16 @@ async def closed_reviews_pending_channel_cleanup(
     work list. Also how a review closed before this feature existed (`closed_at` far
     in the past, `channel_post_deleted_at` still `None`) gets swept up on the very
     first tick after deploy, with no separate backfill needed.
+
+    Excludes anything already given up on (`channel_cleanup_abandoned_at` set) — a
+    post past Telegram's 48-hour bot-deletion window stays that way forever, so
+    retrying it on every future tick would just be a no-op warning log, repeated.
     """
     result = await session.execute(
         select(Review).where(
             Review.is_closed.is_(True),
             Review.channel_post_deleted_at.is_(None),
+            Review.channel_cleanup_abandoned_at.is_(None),
             Review.closed_at.is_not(None),
             Review.closed_at <= cutoff,
         )

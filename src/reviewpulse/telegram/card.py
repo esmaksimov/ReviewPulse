@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from enum import Enum
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
@@ -13,6 +14,20 @@ from ..services.reviews import approvals_needed
 from . import keyboards, texts
 
 logger = logging.getLogger(__name__)
+
+
+class ChannelDeleteResult(Enum):
+    """What `delete_from_channel` actually accomplished — `channel_cleanup_tick`
+    treats each one differently (see there)."""
+
+    #: Gone from the channel now, or already was — nothing left to do.
+    DELETED = "deleted"
+    #: Telegram refused for a reason that might clear up on its own (most likely a
+    #: missing "Delete messages" right) — worth retrying on a later tick.
+    RETRY = "retry"
+    #: Telegram refused because the post is older than the Bot API's 48-hour
+    #: deletion window — permanent, no later tick will ever succeed either.
+    TOO_OLD = "too_old"
 
 
 def review_url(review: Review) -> str | None:
@@ -115,7 +130,7 @@ def headline(review: Review, locale: str) -> str:
     return " — ".join(parts) if parts else texts.t(locale, "default_headline")
 
 
-async def delete_from_channel(bot: Bot, review: Review) -> bool:
+async def delete_from_channel(bot: Bot, review: Review) -> ChannelDeleteResult:
     """Remove the original post from the channel — called by
     `scheduler.jobs.channel_cleanup_tick` once a closed review has sat for
     `Settings.channel_cleanup_delay`, never right on close, so the post is still
@@ -124,22 +139,34 @@ async def delete_from_channel(bot: Bot, review: Review) -> bool:
     channel listing gets decluttered.
 
     Requires the bot to be a channel admin with the "Delete messages" right; without
-    it Telegram refuses, which is logged and returned as `False` — the caller uses
-    that to keep retrying on later ticks, so a backlog clears itself once the right
-    is granted. A post that's already gone (someone deleted it by hand) counts as
-    `True` instead: the end state is the one this function exists to reach, so
+    it Telegram refuses with `RETRY`, so a backlog clears itself once the right is
+    granted. A post that's already gone (someone deleted it by hand) counts as
+    `DELETED` instead: the end state is the one this function exists to reach, so
     there's nothing to retry — same "no-op event replays are fine" tolerance as
     `refresh`, just returning success instead of silently swallowing it.
+
+    Telegram's Bot API flatly refuses to delete any message older than 48 hours —
+    true for every bot, admin rights or not, with no override. A review that takes
+    that long to close is rare, but when it does, no amount of retrying ever
+    succeeds, so this is told apart from `RETRY` as `TOO_OLD`.
     """
     if review.channel_chat_id is None or review.channel_message_id is None:
-        return False
+        return ChannelDeleteResult.RETRY
     try:
         await bot.delete_message(
             chat_id=review.channel_chat_id, message_id=review.channel_message_id
         )
     except TelegramBadRequest as exc:
         if "message to delete not found" in str(exc):
-            return True
+            return ChannelDeleteResult.DELETED
+        if "message can't be deleted" in str(exc):
+            logger.warning(
+                "channel post for review %s is past Telegram's 48h deletion window, "
+                "giving up: %s",
+                review.id,
+                exc,
+            )
+            return ChannelDeleteResult.TOO_OLD
         logger.warning("could not delete channel post for review %s: %s", review.id, exc)
-        return False
-    return True
+        return ChannelDeleteResult.RETRY
+    return ChannelDeleteResult.DELETED

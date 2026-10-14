@@ -7,19 +7,21 @@ import logging
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
 from ..db import repo
-from ..db.models import utcnow
+from ..db.models import Review, utcnow
 from ..db.session import Database
 from ..domain.escalation import policy_from_settings
 from ..domain.state import Event
 from ..domain.workhours import calendar_from_settings
 from ..gitlab.client import GitLabClient
 from ..i18n import resolve_locale
+from ..services import admin as admin_service
 from ..services import gitlab_sync, nudges
 from ..services import stats as stats_service
-from ..telegram import card, stats_report
+from ..telegram import card, stats_report, texts
 from ..telegram.sender import (
     TelegramNudgeSender,
     notify_author_changes_requested,
@@ -98,15 +100,51 @@ async def channel_cleanup_tick(bot: Bot, database: Database, settings: Settings)
     async with database.session() as session:
         reviews = await repo.closed_reviews_pending_channel_cleanup(session, cutoff)
         done = 0
+        abandoned: list[Review] = []
         for review in reviews:
-            if await card.delete_from_channel(bot, review):
+            result = await card.delete_from_channel(bot, review)
+            if result is card.ChannelDeleteResult.DELETED:
                 review.channel_post_deleted_at = utcnow()
                 done += 1
-            # Left `None` on failure (most likely a missing "Delete messages" right)
-            # so the next tick retries it.
+            elif result is card.ChannelDeleteResult.TOO_OLD:
+                review.channel_cleanup_abandoned_at = utcnow()
+                abandoned.append(review)
+            # RETRY: left alone (most likely a missing "Delete messages" right), so
+            # the next tick retries it.
+
+        if abandoned:
+            await _notify_admins_of_abandoned_cleanups(bot, session, settings, abandoned)
 
     if reviews:
         logger.info("channel cleanup removed %s/%s post(s)", done, len(reviews))
+
+
+async def _notify_admins_of_abandoned_cleanups(
+    bot: Bot, session: AsyncSession, settings: Settings, reviews: list[Review]
+) -> None:
+    """One-time DM telling admins which posts need deleting by hand — a real human
+    in the Telegram app has no 48-hour limit, only the bot does (see
+    `telegram.card.delete_from_channel`)."""
+    lines = []
+    for review in reviews:
+        url = card.review_url(review)
+        headline = card.headline(review, settings.default_locale)
+        lines.append(f"• {headline}\n{url}" if url else f"• {headline}")
+    body = "\n".join(lines)
+
+    admins = await admin_service.list_admins_for_display(session, settings)
+    for telegram_user_id, _username in admins:
+        user = await repo.get_user_by_telegram_id(session, telegram_user_id)
+        locale = resolve_locale(user.locale if user else None, default=settings.default_locale)
+        text = texts.t(locale, "cleanup_abandoned_notice", count=len(reviews)) + "\n\n" + body
+        try:
+            await bot.send_message(
+                chat_id=telegram_user_id, text=text, disable_web_page_preview=True
+            )
+        except (TelegramForbiddenError, TelegramBadRequest) as exc:
+            logger.warning(
+                "could not notify admin %s about abandoned cleanup: %s", telegram_user_id, exc
+            )
 
 
 async def stats_report_tick(bot: Bot, database: Database, settings: Settings) -> None:

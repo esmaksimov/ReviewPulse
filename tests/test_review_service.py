@@ -352,6 +352,19 @@ async def test_channel_cleanup_skips_a_post_already_removed(session) -> None:
     assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
 
 
+async def test_channel_cleanup_skips_a_post_already_abandoned(session) -> None:
+    """Once Telegram's 48h deletion window has been missed for good
+    (`telegram.card.ChannelDeleteResult.TOO_OLD`), the post must never be retried
+    again — unlike a merely-missing admin right, no later tick can ever succeed."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+    review.channel_cleanup_abandoned_at = msk(27, 12, 0)
+
+    assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
+
+
 async def test_channel_cleanup_skips_a_still_open_review(session) -> None:
     await make_review(session)
     assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []

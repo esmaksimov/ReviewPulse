@@ -195,6 +195,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "manage_admin_removed": "✅ Готово, больше не админ.",
         "manage_cancelled": "Отменено.",
+        "cleanup_abandoned_notice": (
+            "⚠️ Не могу удалить из канала старый пост — прошло больше 48 часов с "
+            "публикации, и Bot API Telegram это больше не позволяет ни одному боту "
+            "(ограничение самого Telegram, не бота). Удалите вручную в канале. "
+            "Постов: {count}"
+        ),
         "announce_step_files": (
             "Пришли файлы (документы/фото) по одному. Когда закончишь — нажми «Готово»."
         ),
@@ -394,6 +400,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "manage_admin_removed": "✅ Done, no longer an admin.",
         "manage_cancelled": "Cancelled.",
+        "cleanup_abandoned_notice": (
+            "⚠️ Can't delete an old channel post — more than 48 hours have passed "
+            "since it was posted, and Telegram's Bot API no longer allows it for any "
+            "bot (a Telegram limit, not a bot setting). Please delete it manually in "
+            "the channel. Posts: {count}"
+        ),
         "announce_step_files": (
             "Send files (documents/photos) one at a time. Tap Done when you're finished."
         ),
@@ -593,6 +605,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "manage_admin_removed": "✅ Listo, ya no es administrador.",
         "manage_cancelled": "Cancelado.",
+        "cleanup_abandoned_notice": (
+            "⚠️ No puedo borrar una publicación antigua del canal — pasaron más de 48 "
+            "horas desde que se publicó, y la Bot API de Telegram ya no lo permite "
+            "para ningún bot (un límite de Telegram, no una opción del bot). Bórrala "
+            "a mano en el canal. Publicaciones: {count}"
+        ),
         "announce_step_files": (
             "Envía archivos (documentos/fotos) de uno en uno. Pulsa Listo cuando "
             "termines."
@@ -794,6 +812,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "manage_admin_removed": "✅ Fatto, non è più admin.",
         "manage_cancelled": "Annullato.",
+        "cleanup_abandoned_notice": (
+            "⚠️ Non riesco a eliminare un vecchio post dal canale — sono passate più "
+            "di 48 ore dalla pubblicazione, e la Bot API di Telegram non lo consente "
+            "più a nessun bot (un limite di Telegram, non un'impostazione del bot). "
+            "Eliminalo a mano nel canale. Post: {count}"
+        ),
         "announce_step_files": (
             "Invia i file (documenti/foto) uno alla volta. Premi Fatto quando hai finito."
         ),
@@ -979,6 +1003,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "manage_admin_removed": "✅ 完成，已不再是管理员。",
         "manage_cancelled": "已取消。",
+        "cleanup_abandoned_notice": (
+            "⚠️ 无法删除频道里的一条旧帖子——发布已经超过 48 小时，Telegram 的 Bot API "
+            "不再允许任何机器人删除它（这是 Telegram 自身的限制，不是机器人的设置）。"
+            "请在频道里手动删除。涉及帖子数：{count}"
+        ),
         "announce_step_files": "依次发送文件（文档/图片）。发完后点「完成」。",
         "btn_announce_files_done": "✅ 完成",
         "announce_file_added": "已添加，目前共 {count} 个文件。继续发送或点「完成」。",

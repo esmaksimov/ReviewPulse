@@ -119,7 +119,7 @@ async def test_delete_from_channel_removes_the_original_post() -> None:
 
     result = await card.delete_from_channel(bot, review)
 
-    assert result is True
+    assert result is card.ChannelDeleteResult.DELETED
     assert bot.deleted == [(-1001111111111, 42)]
 
 
@@ -131,20 +131,20 @@ async def test_delete_from_channel_is_a_noop_before_the_channel_message_is_known
 
     result = await card.delete_from_channel(bot, review)
 
-    assert result is False
+    assert result is card.ChannelDeleteResult.RETRY
     assert bot.deleted == []
 
 
 async def test_delete_from_channel_reports_failure_when_the_bot_lacks_the_right() -> None:
     """Without the "Delete messages" admin right, Telegram refuses — the caller
-    (`scheduler.jobs.channel_cleanup_tick`) needs `False` back to know to retry on
+    (`scheduler.jobs.channel_cleanup_tick`) needs `RETRY` back to know to retry on
     the next tick rather than mark this one done."""
     review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
     bot = FakeBot(fail_message="not enough rights to delete a message")
 
     result = await card.delete_from_channel(bot, review)  # must not raise
 
-    assert result is False
+    assert result is card.ChannelDeleteResult.RETRY
 
 
 async def test_delete_from_channel_treats_an_already_gone_post_as_done() -> None:
@@ -156,4 +156,16 @@ async def test_delete_from_channel_treats_an_already_gone_post_as_done() -> None
 
     result = await card.delete_from_channel(bot, review)
 
-    assert result is True
+    assert result is card.ChannelDeleteResult.DELETED
+
+
+async def test_delete_from_channel_gives_up_past_telegrams_48_hour_window() -> None:
+    """Telegram refuses any bot — admin rights or not — permission to delete a
+    message older than 48 hours, and no amount of retrying ever changes that, unlike
+    a merely-missing admin right."""
+    review = Review(id=1, channel_chat_id=-1001111111111, channel_message_id=42)
+    bot = FakeBot(fail_message="message can't be deleted")
+
+    result = await card.delete_from_channel(bot, review)
+
+    assert result is card.ChannelDeleteResult.TOO_OLD
