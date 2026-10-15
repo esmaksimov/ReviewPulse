@@ -16,6 +16,7 @@ from .models import (
     AnnouncementDraft,
     AssignmentTransition,
     BotAdmin,
+    ChannelAttachment,
     MergeRequestLink,
     NudgeLog,
     Review,
@@ -518,6 +519,48 @@ async def add_draft_attachment(
 
 def draft_attachments(draft: AnnouncementDraft) -> list[dict]:
     return list(json.loads(draft.attachments_json))
+
+
+# --- channel attachments (files sent alongside a published post) ----------------
+
+
+async def record_channel_attachment(
+    session: AsyncSession, *, channel_chat_id: int, post_message_id: int, message_id: int
+) -> None:
+    session.add(
+        ChannelAttachment(
+            channel_chat_id=channel_chat_id,
+            post_message_id=post_message_id,
+            message_id=message_id,
+        )
+    )
+    await session.flush()
+
+
+async def channel_attachment_message_ids(
+    session: AsyncSession, channel_chat_id: int, post_message_id: int
+) -> list[int]:
+    result = await session.execute(
+        select(ChannelAttachment.message_id).where(
+            ChannelAttachment.channel_chat_id == channel_chat_id,
+            ChannelAttachment.post_message_id == post_message_id,
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def clear_channel_attachments(
+    session: AsyncSession, channel_chat_id: int, post_message_id: int
+) -> None:
+    result = await session.execute(
+        select(ChannelAttachment).where(
+            ChannelAttachment.channel_chat_id == channel_chat_id,
+            ChannelAttachment.post_message_id == post_message_id,
+        )
+    )
+    for row in result.scalars().all():
+        await session.delete(row)
+    await session.flush()
 
 
 async def record_nudge(

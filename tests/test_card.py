@@ -17,13 +17,16 @@ from reviewpulse.telegram import card
 class FakeBot:
     """Records `delete_message` calls; `fail_message` makes it raise like Telegram
     does — with whatever error text the test needs, e.g. missing rights vs. the post
-    already being gone."""
+    already being gone. `fail_for`, if set, narrows that failure to specific message
+    ids only, so a test can check that one bad id doesn't stop the rest from being
+    deleted."""
 
     fail_message: str | None = None
+    fail_for: set[int] | None = None
     deleted: list[tuple[int, int]] = field(default_factory=list)
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
-        if self.fail_message is not None:
+        if self.fail_message is not None and (self.fail_for is None or message_id in self.fail_for):
             raise TelegramBadRequest(
                 method=DeleteMessage(chat_id=chat_id, message_id=message_id),
                 message=self.fail_message,
@@ -169,3 +172,33 @@ async def test_delete_from_channel_gives_up_past_telegrams_48_hour_window() -> N
     result = await card.delete_from_channel(bot, review)
 
     assert result is card.ChannelDeleteResult.TOO_OLD
+
+
+async def test_delete_attachments_removes_each_message() -> None:
+    bot = FakeBot()
+
+    await card.delete_attachments(bot, -1001111111111, [101, 102, 103])
+
+    assert bot.deleted == [
+        (-1001111111111, 101),
+        (-1001111111111, 102),
+        (-1001111111111, 103),
+    ]
+
+
+async def test_delete_attachments_tolerates_an_already_gone_message() -> None:
+    bot = FakeBot(fail_message="message to delete not found")
+
+    await card.delete_attachments(bot, -1001111111111, [101])  # must not raise
+
+    assert bot.deleted == []
+
+
+async def test_delete_attachments_continues_past_one_failure() -> None:
+    """One bad id (say, already past the 48h window too) must not stop the rest of
+    the attachments from being cleaned up."""
+    bot = FakeBot(fail_message="message can't be deleted", fail_for={102})
+
+    await card.delete_attachments(bot, -1001111111111, [101, 102, 103])  # must not raise
+
+    assert bot.deleted == [(-1001111111111, 101), (-1001111111111, 103)]

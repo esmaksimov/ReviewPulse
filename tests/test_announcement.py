@@ -367,12 +367,16 @@ class FakeBot:
 
     async def send_photo(self, chat_id, photo, **kwargs):
         self.photos.append({"chat_id": chat_id, "photo": photo, **kwargs})
+        return SimpleNamespace(message_id=100 + len(self.photos))
 
     async def send_document(self, chat_id, document, **kwargs):
         self.documents.append({"chat_id": chat_id, "document": document, **kwargs})
+        return SimpleNamespace(message_id=200 + len(self.documents))
 
     async def send_media_group(self, chat_id, media, **kwargs):
         self.media_groups.append({"chat_id": chat_id, "media": media, **kwargs})
+        base = 300 + 10 * len(self.media_groups)
+        return [SimpleNamespace(message_id=base + i) for i in range(len(media))]
 
 
 async def test_publish_sends_the_rendered_post_and_marks_the_draft_published(session) -> None:
@@ -440,6 +444,30 @@ async def test_publish_sends_a_single_attachment_as_itself(session) -> None:
     ]
     assert bot.photos == []
     assert bot.media_groups == []
+
+
+async def test_publish_records_the_attachment_message_for_later_cleanup(session) -> None:
+    """Without this, `scheduler.jobs.channel_cleanup_tick` has no way to find the
+    file message once the post it replied to is deleted — it would outlive its own
+    post, orphaned in the channel forever."""
+    settings = make_settings(
+        channel_id=-100123, **{"backend/api": {"product": "Demo", "techlead": "lead"}}
+    )
+    text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+        attachments=[{"file_id": "doc-1", "kind": "document"}],
+    )
+
+    bot = FakeBot()
+    await announcements.publish(bot, session, draft, settings)
+
+    assert await repo.channel_attachment_message_ids(session, -100123, 42) == [201]
 
 
 async def test_publish_sends_several_attachments_as_one_media_group(session) -> None:

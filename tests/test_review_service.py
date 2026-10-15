@@ -365,6 +365,27 @@ async def test_channel_cleanup_skips_a_post_already_abandoned(session) -> None:
     assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
 
 
+async def test_channel_attachments_round_trip(session) -> None:
+    """`services.announcements.publish` records one of these per file sent alongside
+    a post; `scheduler.jobs.channel_cleanup_tick` reads them back by the post's own
+    `(chat_id, message_id)` once it deletes the post, to delete the files too, then
+    clears the rows so they don't linger forever."""
+    await repo.record_channel_attachment(
+        session, channel_chat_id=-100123, post_message_id=42, message_id=201
+    )
+    await repo.record_channel_attachment(
+        session, channel_chat_id=-100123, post_message_id=42, message_id=202
+    )
+
+    assert await repo.channel_attachment_message_ids(session, -100123, 42) == [201, 202]
+    assert await repo.channel_attachment_message_ids(session, -100123, 999) == [], (
+        "a different post's attachments must never bleed into this one's"
+    )
+
+    await repo.clear_channel_attachments(session, -100123, 42)
+    assert await repo.channel_attachment_message_ids(session, -100123, 42) == []
+
+
 async def test_channel_cleanup_skips_a_still_open_review(session) -> None:
     await make_review(session)
     assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []

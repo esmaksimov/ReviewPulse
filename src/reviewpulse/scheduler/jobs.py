@@ -106,6 +106,14 @@ async def channel_cleanup_tick(bot: Bot, database: Database, settings: Settings)
             if result is card.ChannelDeleteResult.DELETED:
                 review.channel_post_deleted_at = utcnow()
                 done += 1
+                attachment_ids = await repo.channel_attachment_message_ids(
+                    session, review.channel_chat_id, review.channel_message_id
+                )
+                if attachment_ids:
+                    await card.delete_attachments(bot, review.channel_chat_id, attachment_ids)
+                    await repo.clear_channel_attachments(
+                        session, review.channel_chat_id, review.channel_message_id
+                    )
             elif result is card.ChannelDeleteResult.TOO_OLD:
                 review.channel_cleanup_abandoned_at = utcnow()
                 abandoned.append(review)

@@ -283,6 +283,28 @@ class AnnouncementDraft(Base, TimestampMixin):
     cancelled_at: Mapped[datetime | None] = mapped_column(UtcDateTime())
 
 
+class ChannelAttachment(Base, TimestampMixin):
+    """One file message sent as a reply to a published `/announce` post
+    (`services.announcements._send_attachments`), keyed by the post's own
+    `(chat_id, message_id)` rather than a `Review` row — the review for a
+    just-published post doesn't exist yet at send time, only once the channel-post
+    update for it comes back through the normal tracking path.
+
+    Exists purely so `scheduler.jobs.channel_cleanup_tick` can find and delete these
+    alongside the post itself: without it, deleting the post would leave its attached
+    files behind in the channel forever, orphaned replies to a message that's gone.
+    """
+
+    __tablename__ = "channel_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    #: The post's own message id — matches `Review.channel_message_id` once that row
+    #: exists, but this doesn't hold a foreign key to it for that reason.
+    post_message_id: Mapped[int] = mapped_column(Integer, index=True)
+    message_id: Mapped[int] = mapped_column(Integer)
+
+
 class AssignmentTransition(Base):
     """One state change on a (review, reviewer) pair, with its timestamp.
 

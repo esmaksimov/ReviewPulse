@@ -313,22 +313,34 @@ async def publish(
     sent = await bot.send_message(
         chat_id=settings.channel_id, text=text, disable_web_page_preview=True
     )
-    await _send_attachments(
+    attachment_message_ids = await _send_attachments(
         bot, settings.channel_id, repo.draft_attachments(draft), reply_to=sent.message_id
     )
+    for message_id in attachment_message_ids:
+        await repo.record_channel_attachment(
+            session,
+            channel_chat_id=settings.channel_id,
+            post_message_id=sent.message_id,
+            message_id=message_id,
+        )
     await repo.mark_draft_published(session, draft)
 
 
 async def _send_attachments(
     bot: Bot, chat_id: int, attachments: list[dict], *, reply_to: int
-) -> None:
+) -> list[int]:
     """A single file goes out as itself; two or more go out as one media group (a
     native Telegram album) so they land together under the post instead of as a
     string of separate messages. Telegram caps a group at 10 — unlikely to ever be
     hit here, but chunked defensively rather than failing outright if it is.
+
+    Returns the sent messages' own ids — the caller records them against the post
+    (`repo.record_channel_attachment`) so `scheduler.jobs.channel_cleanup_tick` can
+    find and delete them alongside it later; otherwise they'd outlive the post they
+    were attached to, orphaned replies to a message that's gone.
     """
     if not attachments:
-        return
+        return []
 
     from aiogram.types import InputMediaDocument, InputMediaPhoto
 
@@ -339,15 +351,18 @@ async def _send_attachments(
     if len(attachments) == 1:
         item = attachments[0]
         if item["kind"] == "photo":
-            await bot.send_photo(chat_id, item["file_id"], reply_to_message_id=reply_to)
+            sent = await bot.send_photo(chat_id, item["file_id"], reply_to_message_id=reply_to)
         else:
-            await bot.send_document(chat_id, item["file_id"], reply_to_message_id=reply_to)
-        return
+            sent = await bot.send_document(chat_id, item["file_id"], reply_to_message_id=reply_to)
+        return [sent.message_id]
 
+    message_ids = []
     for start in range(0, len(attachments), 10):
         chunk = attachments[start : start + 10]
-        await bot.send_media_group(
+        sent_group = await bot.send_media_group(
             chat_id,
             media=[_media(item) for item in chunk],
             reply_to_message_id=reply_to if start == 0 else None,
         )
+        message_ids.extend(message.message_id for message in sent_group)
+    return message_ids

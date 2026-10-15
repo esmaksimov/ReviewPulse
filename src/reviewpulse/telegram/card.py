@@ -170,3 +170,20 @@ async def delete_from_channel(bot: Bot, review: Review) -> ChannelDeleteResult:
         logger.warning("could not delete channel post for review %s: %s", review.id, exc)
         return ChannelDeleteResult.RETRY
     return ChannelDeleteResult.DELETED
+
+
+async def delete_attachments(bot: Bot, chat_id: int, message_ids: list[int]) -> None:
+    """Delete the files sent alongside a post, once the post itself is gone — called
+    right after `delete_from_channel` returns `DELETED` (see `channel_cleanup_tick`).
+    Not attempted for `TOO_OLD`: a file sent moments after its post is just as far
+    past the 48-hour window, so there's nothing a retry here could ever accomplish
+    either — they're left for the admin to clean up by hand along with the post.
+    """
+    for message_id in message_ids:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except TelegramBadRequest as exc:
+            if "message to delete not found" not in str(exc):
+                logger.warning(
+                    "could not delete attachment message %s in %s: %s", message_id, chat_id, exc
+                )
