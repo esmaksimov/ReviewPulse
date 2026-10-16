@@ -151,3 +151,38 @@ async def test_removing_from_one_product_does_not_touch_a_global_membership(sess
     assert await admin_service.pool_usernames(session, "Demo") == ["alice"], (
         "the global row is untouched"
     )
+
+
+# --- the required reviewer (techlead) override -----------------------------------
+
+
+async def test_resolve_techlead_falls_back_to_the_env_default_untouched(session) -> None:
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") == "lead"
+    assert await admin_service.resolve_techlead(session, "Demo", None) is None
+
+
+async def test_set_techlead_overrides_the_env_default(session) -> None:
+    await admin_service.set_techlead(
+        session, product="Demo", username="newlead", set_by_user_id=1
+    )
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") == "newlead"
+
+
+async def test_set_techlead_to_none_explicitly_clears_it(session) -> None:
+    """A DB row with `username=None` beats the env default — explicitly "no
+    required reviewer" is different from "never touched"."""
+    await admin_service.set_techlead(session, product="Demo", username=None, set_by_user_id=1)
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") is None
+
+
+async def test_set_techlead_is_an_upsert(session) -> None:
+    await admin_service.set_techlead(session, product="Demo", username="first", set_by_user_id=1)
+    await admin_service.set_techlead(session, product="Demo", username="second", set_by_user_id=1)
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") == "second"
+
+
+async def test_set_techlead_does_not_leak_across_products(session) -> None:
+    await admin_service.set_techlead(
+        session, product="Demo", username="demolead", set_by_user_id=1
+    )
+    assert await admin_service.resolve_techlead(session, "Other", "lead") == "lead"

@@ -379,6 +379,26 @@ class ReviewerPoolMember(Base, TimestampMixin):
     added_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
+class ProductTechlead(Base, TimestampMixin):
+    """DB override for a product's required reviewer
+    (`ProjectReviewConfig.techlead`), editable through `/manage` instead of a
+    `REVIEW_PROJECTS` redeploy.
+
+    One row per product. Its mere *existence* is what matters, not just
+    `username`: a row with `username=None` means "explicitly cleared to no
+    required reviewer", told apart from "never touched" (which falls back to
+    REVIEW_PROJECTS's own value) only by whether a row is there at all — see
+    `services.admin.resolve_techlead`.
+    """
+
+    __tablename__ = "product_techleads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product: Mapped[str] = mapped_column(String(256), unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64))
+    set_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class NudgeLog(Base):
     """Audit trail of every DM sent — makes "why did it ping me" answerable."""
 

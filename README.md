@@ -193,7 +193,8 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 
 - `product` — shown on the generated post.
 - `techlead` *(optional)* — always included, unless they're the one running
-  `/announce`.
+  `/announce`. Overridable per product through `/manage` without touching `.env` —
+  see [Admin management](#admin-management).
 - `reviewer_count` *(optional, default 2)* — total reviewers on the post, techlead
   included.
 
@@ -432,16 +433,18 @@ production.
 
 ## Admin management
 
-Two things are editable from inside Telegram, no redeploy needed: **who has admin
-access**, and **each product's reviewer pool** `/announce` draws from.
+Three things are editable from inside Telegram, no redeploy needed: **who has admin
+access**, **each product's reviewer pool**, and **each product's required reviewer**
+— all consulted by `/announce`.
 
 - **`/admins`** — visible to everyone, lists who currently has admin access (the same
   "look, don't touch" split as `/products`).
-- **`/manage`** — admin-only, opens a panel with four actions: add/remove a reviewer
-  pool member, add/remove an admin. Re-checked on every button press, not just on
-  opening the panel, in case someone reaches it by replaying an old callback or typing
-  a button's label by hand. Every prompt carries a **Cancel** button, so backing out
-  mid-flow never means typing something just to make it fail validation.
+- **`/manage`** — admin-only, opens a panel with five actions: add/remove a reviewer
+  pool member, change a product's required reviewer, add/remove an admin. Re-checked
+  on every button press, not just on opening the panel, in case someone reaches it by
+  replaying an old callback or typing a button's label by hand. Every prompt carries a
+  **Cancel** button, so backing out mid-flow never means typing something just to make
+  it fail validation.
 
 Adding to the pool asks which product's pool first — one tap per configured product,
 plus **🌐 all products** to add someone everywhere at once. Picking a product doesn't
@@ -455,11 +458,21 @@ require that person to have ever started the bot. Adding an *admin* does require
 (admin-ness is keyed by their numeric Telegram id, not a username), so `/manage` asks
 the target to `/start` the bot first if they haven't.
 
-Both lists start out seeded from `ADMIN_USER_IDS` in `.env` — a comma-separated list
-of numeric ids, consulted only while the admin table is still empty. The moment the
-first admin is added through the bot, that env list stops mattering at all; it exists
-purely as a bootstrap/recovery fallback (first deploy, or the unlikely case where
-every admin has removed themselves), not an always-on allowlist layered underneath.
+Changing the required reviewer works the same way, minus the "all products" option —
+a product's required reviewer is always exactly its own, so it's one tap on the
+product, then a `@username` (or **🚫 No required reviewer** to clear it outright, a
+product can legitimately have none). The override replaces `REVIEW_PROJECTS`'s own
+`techlead` value entirely, including for the "do these projects draw reviewers the
+same way" check `/announce` runs when a draft names MRs across several repos — two
+repos that disagree in `.env` but share a `/manage`-set override agree in practice,
+and vice versa.
+
+The admin list itself starts out seeded from `ADMIN_USER_IDS` in `.env` — a
+comma-separated list of numeric ids, consulted only while the admin table is still
+empty. The moment the first admin is added through the bot, that env list stops
+mattering at all; it exists purely as a bootstrap/recovery fallback (first deploy, or
+the unlikely case where every admin has removed themselves), not an always-on
+allowlist layered underneath.
 
 ---
 
@@ -496,7 +509,7 @@ active reviewer on it, so you can't double up or accidentally name yourself.
 | `/products` | list configured products, their required reviewer, and each one's pool |
 | `/myposts` | reassign a reviewer on your own already-published posts — see [Reassigning a reviewer](#reassigning-a-reviewer) |
 | `/admins` | list who currently has admin access — see [Admin management](#admin-management) |
-| `/manage` | add/remove reviewer pool members and admins — admin-only |
+| `/manage` | add/remove reviewer pool members, change a product's required reviewer, add/remove admins — admin-only |
 | `/link <username>` | link your GitLab account (for Mode B) |
 | `/lang <code>` | switch the bot's language for your own DMs |
 | `/mute 2h`, `/unmute` | go quiet / start reminding again |
@@ -512,7 +525,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 338 tests
+poetry run pytest                   # 351 tests
 poetry run ruff check src tests
 ```
 

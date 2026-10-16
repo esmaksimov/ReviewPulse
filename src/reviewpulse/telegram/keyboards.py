@@ -43,12 +43,15 @@ class AnnounceProduct(CallbackData, prefix="ap"):
 
 
 class ManageAction(CallbackData, prefix="mg"):
-    """One of the four entry points on the admin-only management panel, plus
-    `cancel` — reused on the username-capture prompts those first two open into
-    (see `manage_username_prompt`), the same way `AnnounceStep`'s `cancel` covers
-    every step of that composer rather than needing one callback class per step."""
+    """One of the entry points on the admin-only management panel, plus `cancel` and
+    `techlead_clear` — reused on the username-capture prompts those first ones open
+    into (see `manage_username_prompt`), the same way `AnnounceStep`'s `cancel`
+    covers every step of that composer rather than needing one callback class per
+    step."""
 
-    action: str  # pool_add | pool_remove | admin_add | admin_remove | cancel
+    action: str
+    # pool_add | pool_remove | admin_add | admin_remove | techlead_set
+    # | techlead_clear | cancel
 
 
 class PoolProductChoice(CallbackData, prefix="ppc"):
@@ -57,6 +60,14 @@ class PoolProductChoice(CallbackData, prefix="ppc"):
     (remove). Empty string means every product at once."""
 
     mode: str  # add | remove
+    product: str
+
+
+class TechleadProductChoice(CallbackData, prefix="tpc"):
+    """Which product's required reviewer `techlead_set` acts on — asked right after
+    picking that panel button, before the username prompt. Unlike the pool, a
+    techlead is always exactly one product's — there's no "every product" option."""
+
     product: str
 
 
@@ -231,8 +242,8 @@ def announce_products(products: list[str], locale: str) -> InlineKeyboardMarkup:
 
 
 def manage_panel(locale: str) -> InlineKeyboardMarkup:
-    """The admin-only control panel: add/remove on a product's reviewer pool, and on
-    the admin list itself."""
+    """The admin-only control panel: add/remove on a product's reviewer pool, change
+    a product's required reviewer, and add/remove on the admin list itself."""
     builder = InlineKeyboardBuilder()
     builder.button(
         text=texts.t(locale, "btn_manage_pool_add"),
@@ -243,6 +254,10 @@ def manage_panel(locale: str) -> InlineKeyboardMarkup:
         callback_data=ManageAction(action="pool_remove"),
     )
     builder.button(
+        text=texts.t(locale, "btn_manage_techlead_set"),
+        callback_data=ManageAction(action="techlead_set"),
+    )
+    builder.button(
         text=texts.t(locale, "btn_manage_admin_add"),
         callback_data=ManageAction(action="admin_add"),
     )
@@ -250,7 +265,38 @@ def manage_panel(locale: str) -> InlineKeyboardMarkup:
         text=texts.t(locale, "btn_manage_admin_remove"),
         callback_data=ManageAction(action="admin_remove"),
     )
-    builder.adjust(2, 2)
+    builder.adjust(2, 1, 2)
+    return builder.as_markup()
+
+
+def techlead_product_choice(products: list[str], locale: str) -> InlineKeyboardMarkup:
+    """Which product's required reviewer to change — one button per configured
+    product, plus Cancel. No "every product" option here, unlike the pool's chooser:
+    a techlead is always exactly one product's own."""
+    builder = InlineKeyboardBuilder()
+    for product in products:
+        builder.button(text=product, callback_data=TechleadProductChoice(product=product))
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=ManageAction(action="cancel"),
+    )
+    builder.adjust(*([2] * ((len(products) + 1) // 2)), 1)
+    return builder.as_markup()
+
+
+def manage_techlead_prompt(locale: str) -> InlineKeyboardMarkup:
+    """Under the techlead username prompt: a "no required reviewer" clear button
+    alongside the usual Cancel."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=texts.t(locale, "btn_manage_techlead_clear"),
+        callback_data=ManageAction(action="techlead_clear"),
+    )
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=ManageAction(action="cancel"),
+    )
+    builder.adjust(1)
     return builder.as_markup()
 
 

@@ -19,6 +19,7 @@ from .models import (
     ChannelAttachment,
     MergeRequestLink,
     NudgeLog,
+    ProductTechlead,
     Review,
     ReviewerAssignment,
     ReviewerPoolMember,
@@ -489,6 +490,33 @@ async def remove_pool_member(
     await session.delete(member)
     await session.flush()
     return True
+
+
+# --- product techleads -----------------------------------------------------------
+
+
+async def get_product_techlead(session: AsyncSession, product: str) -> ProductTechlead | None:
+    result = await session.execute(
+        select(ProductTechlead).where(ProductTechlead.product == product)
+    )
+    return result.scalar_one_or_none()
+
+
+async def set_product_techlead(
+    session: AsyncSession, *, product: str, username: str | None, set_by_user_id: int
+) -> ProductTechlead:
+    """Upsert — replaces any existing override for `product`, `username=None`
+    included (an explicit clear overwrites an explicit set, same as the reverse)."""
+    existing = await get_product_techlead(session, product)
+    if existing is not None:
+        existing.username = username
+        existing.set_by_user_id = set_by_user_id
+        await session.flush()
+        return existing
+    row = ProductTechlead(product=product, username=username, set_by_user_id=set_by_user_id)
+    session.add(row)
+    await session.flush()
+    return row
 
 
 # --- announcement drafts ------------------------------------------------------

@@ -132,9 +132,10 @@ async def on_status(message: Message, session: AsyncSession, settings: Settings)
 @router.message(Command("products"))
 @router.message(F.text.in_(keyboards.MENU_PRODUCTS_TEXTS))
 async def on_products(message: Message, session: AsyncSession, settings: Settings) -> None:
-    """The REVIEW_PROJECTS setup, grouped by product, plus the shared reviewer pool
-    `/announce` itself draws from — laid out so anyone can check it without actually
-    starting a draft."""
+    """The REVIEW_PROJECTS setup, grouped by product, plus each product's required
+    reviewer and reviewer pool — laid out so anyone can check it without actually
+    starting a draft. Both can be `/manage`-overridden now, so this always shows the
+    *effective* value, not just what's in `.env`."""
     locale = await _locale_for(session, message, settings)
     menu = await _menu_for(session, settings, message.from_user.id, locale)
     configs = announcements.product_reviewer_setup(settings)
@@ -145,7 +146,8 @@ async def on_products(message: Message, session: AsyncSession, settings: Setting
     products = []
     for config in configs:
         pool = await admin_service.pool_usernames(session, config.product)
-        products.append((config.product, config.techlead, pool))
+        techlead = await admin_service.resolve_techlead(session, config.product, config.techlead)
+        products.append((config.product, techlead, pool))
     await message.answer(
         texts.products_list(locale, products), reply_markup=menu, disable_web_page_preview=True
     )

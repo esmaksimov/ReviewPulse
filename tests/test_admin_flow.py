@@ -21,6 +21,7 @@ from reviewpulse.telegram.keyboards import (
     PoolProductChoice,
     RemoveAdmin,
     RemovePoolMember,
+    TechleadProductChoice,
 )
 
 CHAT_ID = 555
@@ -410,3 +411,115 @@ async def test_tapping_the_announce_button_while_mid_pool_add_switches_to_announ
 
     assert chat.last_text() == texts.t("ru", "announce_step_title")
     assert await state.get_state() == "Compose:title"
+
+
+# --- changing a product's required reviewer (techlead) ---------------------------
+
+
+async def test_techlead_set_asks_which_product_first(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="techlead_set"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_techlead_choose_product")
+    assert await state.get_state() is None, "not yet waiting on a username"
+
+
+async def test_techlead_set_flow_overrides_the_env_default(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="techlead_set"), state, session, SETTINGS
+    )
+    await admin.on_techlead_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        TechleadProductChoice(product="Demo"),
+        state,
+        session,
+        SETTINGS,
+    )
+    assert chat.last_text() == texts.t("ru", "manage_ask_techlead_username")
+
+    await admin.on_techlead_username(
+        FakeMessage(chat, text="@newlead"), state, session, SETTINGS
+    )
+
+    assert chat.last_text() == texts.t(
+        "ru", "manage_techlead_set", product="Demo", username="newlead"
+    )
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") == "newlead"
+    assert await state.get_state() is None
+
+
+async def test_techlead_set_reprompts_on_an_invalid_username_without_losing_the_state(
+    session,
+) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="techlead_set"), state, session, SETTINGS
+    )
+    await admin.on_techlead_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        TechleadProductChoice(product="Demo"),
+        state,
+        session,
+        SETTINGS,
+    )
+    await admin.on_techlead_username(FakeMessage(chat, text="no"), state, session, SETTINGS)
+    assert chat.last_text() == texts.t("ru", "manage_invalid_username")
+    assert (await state.get_state()) == admin.ManageFlow.techlead_username.state
+
+
+async def test_techlead_clear_button_removes_the_required_reviewer(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="techlead_set"), state, session, SETTINGS
+    )
+    await admin.on_techlead_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        TechleadProductChoice(product="Demo"),
+        state,
+        session,
+        SETTINGS,
+    )
+
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)),
+        ManageAction(action="techlead_clear"),
+        state,
+        session,
+        SETTINGS,
+    )
+
+    assert chat.last_text() == texts.t("ru", "manage_techlead_cleared", product="Demo")
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") is None
+    assert await state.get_state() is None
+
+
+async def test_techlead_set_is_refused_to_a_non_admin(session) -> None:
+    query = FakeQuery(FakeMessage(Chat(), user=OTHER_USER), user=OTHER_USER)
+    await admin.on_manage_action(
+        query, ManageAction(action="techlead_set"), new_state(), session, SETTINGS
+    )
+    assert query.answers == [texts.t("ru", "manage_no_access")]
+
+
+async def test_cancel_button_clears_the_techlead_set_flow(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="techlead_set"), state, session, SETTINGS
+    )
+    await admin.on_techlead_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        TechleadProductChoice(product="Demo"),
+        state,
+        session,
+        SETTINGS,
+    )
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="cancel"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_cancelled")
+    assert await state.get_state() is None
+    assert await admin_service.resolve_techlead(session, "Demo", "lead") == "lead", (
+        "cancelling must not touch the existing (env) value"
+    )

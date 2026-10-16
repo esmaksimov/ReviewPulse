@@ -16,6 +16,7 @@ from reviewpulse.db.models import AnnouncementDraft
 from reviewpulse.parsing import post_parser
 from reviewpulse.parsing.gitlab_url import MergeRequestRef
 from reviewpulse.parsing.post_parser import parse_post
+from reviewpulse.services import admin as admin_service
 from reviewpulse.services import announcements
 from reviewpulse.services import reviews as review_service
 from reviewpulse.telegram import announcement
@@ -48,7 +49,7 @@ async def seed_pool(session, *usernames: str, product: str | None = None) -> Non
 def test_pick_reviewers_includes_techlead_and_fills_pool() -> None:
     config = ProjectReviewConfig(product="Demo", techlead="lead")
     techlead, picks = announcements.pick_reviewers(
-        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
+        config, ["a", "b", "c"], techlead="lead", composer_username="author", rng=random.Random(1)
     )
     assert techlead == "lead"
     assert len(picks) == 1
@@ -58,7 +59,11 @@ def test_pick_reviewers_includes_techlead_and_fills_pool() -> None:
 def test_pick_reviewers_excludes_composer_from_the_pool() -> None:
     config = ProjectReviewConfig(product="Demo", reviewer_count=3)
     _, picks = announcements.pick_reviewers(
-        config, ["a", "Author", "b"], composer_username="author", rng=random.Random(1)
+        config,
+        ["a", "Author", "b"],
+        techlead=None,
+        composer_username="author",
+        rng=random.Random(1),
     )
     assert "Author" not in picks
     assert set(picks) == {"a", "b"}
@@ -68,7 +73,11 @@ def test_pick_reviewers_drops_techlead_slot_when_composer_is_the_techlead() -> N
     """Case-insensitive: the config might say "Lead", the composer types "lead"."""
     config = ProjectReviewConfig(product="Demo", techlead="Author")
     techlead, picks = announcements.pick_reviewers(
-        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
+        config,
+        ["a", "b", "c"],
+        techlead="Author",
+        composer_username="author",
+        rng=random.Random(1),
     )
     assert techlead is None
     assert len(picks) == 2
@@ -77,7 +86,7 @@ def test_pick_reviewers_drops_techlead_slot_when_composer_is_the_techlead() -> N
 def test_pick_reviewers_handles_a_pool_smaller_than_the_requested_count() -> None:
     config = ProjectReviewConfig(product="Demo", reviewer_count=3)
     _, picks = announcements.pick_reviewers(
-        config, ["a"], composer_username="author", rng=random.Random(1)
+        config, ["a"], techlead=None, composer_username="author", rng=random.Random(1)
     )
     assert picks == ["a"]
 
@@ -85,7 +94,7 @@ def test_pick_reviewers_handles_a_pool_smaller_than_the_requested_count() -> Non
 def test_pick_reviewers_with_no_techlead_draws_the_full_count_from_the_pool() -> None:
     config = ProjectReviewConfig(product="Demo", reviewer_count=2)
     techlead, picks = announcements.pick_reviewers(
-        config, ["a", "b", "c"], composer_username="author", rng=random.Random(1)
+        config, ["a", "b", "c"], techlead=None, composer_username="author", rng=random.Random(1)
     )
     assert techlead is None
     assert len(picks) == 2
@@ -220,6 +229,30 @@ async def test_create_draft_persists_the_resolved_config(session) -> None:
     assert draft.cancelled_at is None
 
 
+async def test_create_draft_uses_a_manage_set_techlead_override(session) -> None:
+    """`services.admin.set_techlead` — the `/manage` "change required reviewer"
+    feature — must actually change who `/announce` draws, not just what `/products`
+    displays."""
+    await seed_pool(session, "pool1", "pool2")
+    settings = make_settings(
+        **{"backend/api": {"product": "Demo Product", "techlead": "lead", "reviewer_count": 2}}
+    )
+    await admin_service.set_techlead(
+        session, product="Demo Product", username="newlead", set_by_user_id=1
+    )
+    text = "Title\n\nhttps://git.example.com/backend/api/-/merge_requests/1"
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=555,
+        composer_username="author",
+        chat_id=555,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+
+    assert draft.techlead_username == "newlead"
+
+
 # --- multiple MRs in one draft ---------------------------------------------------
 #
 # Real posts routinely name several MRs across several repos in one announcement
@@ -279,6 +312,38 @@ async def test_create_draft_rejects_projects_with_disagreeing_configs(session) -
         )
     assert exc_info.value.base_project == "backend/api_controller"
     assert exc_info.value.conflicting_projects == ["backend/checkout"]
+
+
+async def test_create_draft_conflict_check_uses_resolved_not_raw_techleads(session) -> None:
+    """A `/manage` override changes whether two projects conflict, not just what
+    gets drawn — these two disagree in `REVIEW_PROJECTS`, but agree once both
+    products' overrides point at the same person."""
+    settings = make_settings(
+        **{
+            "backend/api_controller": {"product": "Demo A", "techlead": "lead-a"},
+            "backend/checkout": {"product": "Demo B", "techlead": "lead-b"},
+        }
+    )
+    await admin_service.set_techlead(
+        session, product="Demo A", username="shared-lead", set_by_user_id=1
+    )
+    await admin_service.set_techlead(
+        session, product="Demo B", username="shared-lead", set_by_user_id=1
+    )
+    text = (
+        "Title\n\n"
+        "https://git.example.com/backend/api_controller/-/merge_requests/1\n"
+        "https://git.example.com/backend/checkout/-/merge_requests/2"
+    )
+    draft = await announcements.create_draft(
+        session,
+        composer_user_id=1,
+        composer_username="author",
+        chat_id=1,
+        parsed=parse_post(text),
+        settings=settings,
+    )
+    assert draft.techlead_username == "shared-lead"
 
 
 async def test_create_draft_allows_projects_that_only_disagree_on_product(session) -> None:

@@ -169,16 +169,18 @@ def pick_reviewers(
     config: ProjectReviewConfig,
     pool: list[str],
     *,
+    techlead: str | None,
     composer_username: str,
     rng: random.Random | None = None,
 ) -> tuple[str | None, list[str]]:
-    """Techlead (if configured, and not the composer) plus a random draw from `pool`
-    for the rest. Returns (techlead_or_None, pool_picks) — `techlead` is never
-    included in `pool_picks`, so a reroll knows exactly which slot(s) it owns.
+    """`techlead` (if set, and not the composer) plus a random draw from `pool` for
+    the rest. Returns (techlead_or_None, pool_picks) — `techlead` is never included
+    in `pool_picks`, so a reroll knows exactly which slot(s) it owns.
 
-    `pool` is the live, DB-backed, shared reviewer list (`services.admin.pool_usernames`)
-    — passed in rather than read off `config` because it is no longer part of
-    `REVIEW_PROJECTS` at all, unlike `techlead`/`reviewer_count` which stay per-project.
+    Both `pool` and `techlead` are passed in rather than read off `config` — neither
+    lives in `REVIEW_PROJECTS` any more now that both are `/manage`-editable
+    (`services.admin.pool_usernames`/`resolve_techlead`); only `reviewer_count`
+    stays purely per-project. `config` is kept only for that.
 
     The composer reviewing their own post is the same template artefact
     `services.reviews._sync_assignments` already guards against — here it just means
@@ -188,7 +190,6 @@ def pick_reviewers(
     rng = rng or random
     composer = composer_username.lower()
 
-    techlead = config.techlead
     if techlead is not None and techlead.lower() == composer:
         techlead = None
 
@@ -233,29 +234,39 @@ async def create_draft(
         if path is None:
             raise ProductNotConfigured(product)
         base_project, base_config = path, settings.review_projects[path]
+        techlead = await admin_service.resolve_techlead(
+            session, base_config.product, base_config.techlead
+        )
     else:
         configs: dict[str, ProjectReviewConfig] = {}
+        techleads: dict[str, str | None] = {}
         for path in project_paths:
             config = resolve_config(settings, path)
             if config is None:
                 raise ProjectNotConfigured(path)
             configs[path] = config
+            techleads[path] = await admin_service.resolve_techlead(
+                session, config.product, config.techlead
+            )
 
         base_project, base_config = project_paths[0], configs[project_paths[0]]
         # `product` is deliberately left out of this comparison — see
         # `ConflictingProjectConfigs`'s docstring for why a label-only mismatch
         # isn't a real conflict.
-        base_reviewers = (base_config.techlead, base_config.reviewer_count)
+        base_reviewers = (techleads[base_project], base_config.reviewer_count)
         conflicting = [
             path
             for path in project_paths[1:]
-            if (configs[path].techlead, configs[path].reviewer_count) != base_reviewers
+            if (techleads[path], configs[path].reviewer_count) != base_reviewers
         ]
         if conflicting:
             raise ConflictingProjectConfigs(base_project, conflicting)
+        techlead = techleads[base_project]
 
     pool = await admin_service.pool_usernames(session, base_config.product)
-    techlead, picks = pick_reviewers(base_config, pool, composer_username=composer_username)
+    techlead, picks = pick_reviewers(
+        base_config, pool, techlead=techlead, composer_username=composer_username
+    )
 
     return await repo.create_draft(
         session,
@@ -289,7 +300,10 @@ async def reroll(
     if config is None:
         raise ProjectNotConfigured(draft.project_path)
     pool = await admin_service.pool_usernames(session, config.product)
-    _, picks = pick_reviewers(config, pool, composer_username=draft.composer_username)
+    techlead = await admin_service.resolve_techlead(session, config.product, config.techlead)
+    _, picks = pick_reviewers(
+        config, pool, techlead=techlead, composer_username=draft.composer_username
+    )
     await repo.set_draft_pool_picks(session, draft, picks)
     return draft
 

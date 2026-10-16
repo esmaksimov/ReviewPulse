@@ -202,7 +202,8 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 
 - `product` — mostrato sul post generato.
 - `techlead` *(facoltativo)* — sempre incluso, a meno che non sia proprio lui a
-  lanciare `/announce`.
+  lanciare `/announce`. Sovrascrivibile per prodotto da `/manage`, senza toccare
+  `.env` — vedi [Gestione dal bot](#gestione-dal-bot).
 - `reviewer_count` *(facoltativo, default 2)* — totale dei revisori sul post, techlead
   incluso.
 
@@ -455,18 +456,19 @@ silenzio sull'inglese in produzione.
 
 ## Gestione dal bot
 
-Due cose si modificano direttamente da Telegram, senza redeploy: **chi ha accesso da
-amministratore** e **il pool di revisori di ogni prodotto** da cui pesca `/announce`.
+Tre cose si modificano direttamente da Telegram, senza redeploy: **chi ha accesso da
+amministratore**, **il pool di revisori di ogni prodotto** e **il revisore
+obbligatorio di ogni prodotto** — tutto ciò che usa `/announce`.
 
 - **`/admins`** — visibile a tutti, elenca chi ha accesso da amministratore in questo
   momento (la stessa separazione "guardare sì, modificare no" di `/products`).
-- **`/manage`** — solo per amministratori, apre un pannello con quattro azioni:
-  aggiungere/rimuovere un membro del pool di revisori, aggiungere/rimuovere un
-  amministratore. Viene ricontrollato a ogni pressione di pulsante, non solo
-  all'apertura del pannello, nel caso qualcuno ci arrivi riproponendo un vecchio
-  callback o scrivendo a mano il testo di un pulsante. Ogni richiesta ha un pulsante
-  **Annulla** — uscire a metà flusso non significa più dover digitare qualcosa solo
-  per farlo fallire alla validazione.
+- **`/manage`** — solo per amministratori, apre un pannello con cinque azioni:
+  aggiungere/rimuovere un membro del pool di revisori, cambiare il revisore
+  obbligatorio di un prodotto, aggiungere/rimuovere un amministratore. Viene
+  ricontrollato a ogni pressione di pulsante, non solo all'apertura del pannello, nel
+  caso qualcuno ci arrivi riproponendo un vecchio callback o scrivendo a mano il testo
+  di un pulsante. Ogni richiesta ha un pulsante **Annulla** — uscire a metà flusso non
+  significa più dover digitare qualcosa solo per farlo fallire alla validazione.
 
 Aggiungere al pool chiede prima per quale prodotto — un pulsante per ogni prodotto
 configurato, più **🌐 tutti i prodotti** per aggiungere qualcuno ovunque in una volta.
@@ -482,13 +484,23 @@ un *amministratore* invece sì (l'accesso è identificato dall'id numerico Teleg
 non dallo username), quindi `/manage` chiede prima alla persona di fare `/start` se
 il bot non la conosce ancora.
 
-Entrambi gli elenchi partono popolati da `ADMIN_USER_IDS` in `.env` — una lista di id
-numerici separati da virgola, consultata solo finché la tabella degli amministratori
-resta vuota. Nel momento in cui il primo amministratore viene aggiunto tramite il bot,
-quella lista nel `.env` smette del tutto di contare — esiste solo come rete di
-sicurezza per l'avvio/il ripristino (primo deploy, o il caso improbabile in cui tutti
-gli amministratori si siano rimossi da soli), non come elenco sempre attivo sotto al
-database.
+Cambiare il revisore obbligatorio funziona allo stesso modo, ma senza l'opzione
+"tutti i prodotti" — un revisore obbligatorio è sempre di un solo prodotto, quindi
+basta un tocco sul prodotto e poi uno `@username` (oppure **🚫 Nessun revisore
+obbligatorio** per rimuoverlo del tutto — un prodotto può legittimamente non averne
+uno). L'override sostituisce completamente il valore `techlead` di
+`REVIEW_PROJECTS`, incluso per il controllo "questi progetti scelgono i revisori
+allo stesso modo?" che `/announce` esegue quando una bozza nomina MR di più
+repository: due repository che non coincidono in `.env` ma condividono lo stesso
+override impostato da `/manage` coincidono nella pratica, e viceversa.
+
+L'elenco degli amministratori parte popolato da `ADMIN_USER_IDS` in `.env` — una
+lista di id numerici separati da virgola, consultata solo finché la tabella degli
+amministratori resta vuota. Nel momento in cui il primo amministratore viene
+aggiunto tramite il bot, quella lista nel `.env` smette del tutto di contare —
+esiste solo come rete di sicurezza per l'avvio/il ripristino (primo deploy, o il
+caso improbabile in cui tutti gli amministratori si siano rimossi da soli), non come
+elenco sempre attivo sotto al database.
 
 ---
 
@@ -528,7 +540,7 @@ stessi per errore.
 | `/products` | elenca i prodotti configurati, il loro revisore obbligatorio e il pool di ciascuno |
 | `/myposts` | riassegna un revisore sui tuoi post già pubblicati — vedi [Riassegnare un revisore](#riassegnare-un-revisore) |
 | `/admins` | chi ha accesso da amministratore in questo momento — vedi [Gestione dal bot](#gestione-dal-bot) |
-| `/manage` | aggiungere/rimuovere membri del pool di revisori e amministratori — solo amministratori |
+| `/manage` | aggiungere/rimuovere membri del pool di revisori, cambiare il revisore obbligatorio di un prodotto, aggiungere/rimuovere amministratori — solo amministratori |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
 | `/lang <codice>` | cambia la lingua del bot per i tuoi messaggi privati |
 | `/mute 2h`, `/unmute` | silenzia / riattiva i promemoria |
@@ -544,7 +556,7 @@ poetry install
 cp .env.example .env                # compila BOT_TOKEN
 poetry run python -m reviewpulse    # le migrazioni si applicano da sole all'avvio
 
-poetry run pytest                   # 338 test
+poetry run pytest                   # 351 test
 poetry run ruff check src tests
 ```
 

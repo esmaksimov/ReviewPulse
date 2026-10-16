@@ -185,9 +185,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "manage_header": "<b>Управление</b>\n\nЧто сделать?",
         "btn_manage_pool_add": "➕ Добавить в пул",
         "btn_manage_pool_remove": "➖ Убрать из пула",
+        "btn_manage_techlead_set": "🎯 Сменить обязательного ревьюера",
+        "btn_manage_techlead_clear": "🚫 Без обязательного",
         "btn_manage_admin_add": "➕ Добавить админа",
         "btn_manage_admin_remove": "➖ Убрать админа",
         "manage_pool_empty": "Пул пуст — нечего убирать.",
+        "manage_techlead_choose_product": "Для какого продукта сменить обязательного ревьюера?",
+        "manage_ask_techlead_username": (
+            "Пришли @username нового обязательного ревьюера, или нажми "
+            "«Без обязательного»."
+        ),
+        "manage_techlead_set": "✅ Обязательный ревьюер для {product}: @{username}",
+        "manage_techlead_cleared": "✅ Для {product} теперь нет обязательного ревьюера.",
         "manage_admins_empty": (
             "Сейчас нет ни одного админа в базе — список берётся из ADMIN_USER_IDS "
             "в конфиге, убрать их можно только через деплой."
@@ -406,9 +415,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "manage_header": "<b>Manage</b>\n\nWhat would you like to do?",
         "btn_manage_pool_add": "➕ Add to pool",
         "btn_manage_pool_remove": "➖ Remove from pool",
+        "btn_manage_techlead_set": "🎯 Change required reviewer",
+        "btn_manage_techlead_clear": "🚫 No required reviewer",
         "btn_manage_admin_add": "➕ Add admin",
         "btn_manage_admin_remove": "➖ Remove admin",
         "manage_pool_empty": "The pool is empty — nothing to remove.",
+        "manage_techlead_choose_product": "Change the required reviewer for which product?",
+        "manage_ask_techlead_username": (
+            "Send the new required reviewer's @username, or tap "
+            "\"No required reviewer\"."
+        ),
+        "manage_techlead_set": "✅ Required reviewer for {product}: @{username}",
+        "manage_techlead_cleared": "✅ {product} no longer has a required reviewer.",
         "manage_admins_empty": (
             "There's no admin in the database right now — the list falls back to "
             "ADMIN_USER_IDS in the config, which can only be changed by redeploying."
@@ -626,9 +644,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "manage_header": "<b>Gestionar</b>\n\n¿Qué quieres hacer?",
         "btn_manage_pool_add": "➕ Añadir al grupo",
         "btn_manage_pool_remove": "➖ Quitar del grupo",
+        "btn_manage_techlead_set": "🎯 Cambiar revisor obligatorio",
+        "btn_manage_techlead_clear": "🚫 Sin revisor obligatorio",
         "btn_manage_admin_add": "➕ Añadir administrador",
         "btn_manage_admin_remove": "➖ Quitar administrador",
         "manage_pool_empty": "El grupo está vacío — no hay nada que quitar.",
+        "manage_techlead_choose_product": (
+            "¿Para qué producto cambiar el revisor obligatorio?"
+        ),
+        "manage_ask_techlead_username": (
+            "Envía el @usuario del nuevo revisor obligatorio, o pulsa "
+            "\"Sin revisor obligatorio\"."
+        ),
+        "manage_techlead_set": "✅ Revisor obligatorio de {product}: @{username}",
+        "manage_techlead_cleared": "✅ {product} ya no tiene revisor obligatorio.",
         "manage_admins_empty": (
             "Ahora mismo no hay ningún administrador en la base de datos — la lista "
             "recurre a ADMIN_USER_IDS en la configuración, que solo se puede cambiar "
@@ -851,9 +880,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "manage_header": "<b>Gestisci</b>\n\nCosa vuoi fare?",
         "btn_manage_pool_add": "➕ Aggiungi al pool",
         "btn_manage_pool_remove": "➖ Rimuovi dal pool",
+        "btn_manage_techlead_set": "🎯 Cambia revisore obbligatorio",
+        "btn_manage_techlead_clear": "🚫 Nessun revisore obbligatorio",
         "btn_manage_admin_add": "➕ Aggiungi admin",
         "btn_manage_admin_remove": "➖ Rimuovi admin",
         "manage_pool_empty": "Il pool è vuoto — niente da rimuovere.",
+        "manage_techlead_choose_product": (
+            "Per quale prodotto cambiare il revisore obbligatorio?"
+        ),
+        "manage_ask_techlead_username": (
+            "Invia lo @username del nuovo revisore obbligatorio, oppure tocca "
+            "\"Nessun revisore obbligatorio\"."
+        ),
+        "manage_techlead_set": "✅ Revisore obbligatorio per {product}: @{username}",
+        "manage_techlead_cleared": "✅ {product} non ha più un revisore obbligatorio.",
         "manage_admins_empty": (
             "Al momento non c'è nessun admin nel database — l'elenco ricade su "
             "ADMIN_USER_IDS nella configurazione, modificabile solo con un redeploy."
@@ -1060,9 +1100,17 @@ _STRINGS: dict[str, dict[str, str]] = {
         "manage_header": "<b>管理</b>\n\n要做什么？",
         "btn_manage_pool_add": "➕ 加入候选池",
         "btn_manage_pool_remove": "➖ 从候选池移除",
+        "btn_manage_techlead_set": "🎯 更换必选评审人",
+        "btn_manage_techlead_clear": "🚫 不设必选评审人",
         "btn_manage_admin_add": "➕ 添加管理员",
         "btn_manage_admin_remove": "➖ 移除管理员",
         "manage_pool_empty": "候选池是空的，没有可移除的人。",
+        "manage_techlead_choose_product": "要更换哪个产品的必选评审人？",
+        "manage_ask_techlead_username": (
+            "发送新的必选评审人的 @用户名，或者点「不设必选评审人」。"
+        ),
+        "manage_techlead_set": "✅ {product} 的必选评审人：@{username}",
+        "manage_techlead_cleared": "✅ {product} 现在没有必选评审人了。",
         "manage_admins_empty": (
             "数据库里现在没有任何管理员——列表会退回到配置里的 ADMIN_USER_IDS，"
             "只能通过重新部署修改。"

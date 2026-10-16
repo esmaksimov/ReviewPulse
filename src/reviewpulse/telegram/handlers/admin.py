@@ -30,6 +30,7 @@ from ..keyboards import (
     PoolProductChoice,
     RemoveAdmin,
     RemovePoolMember,
+    TechleadProductChoice,
 )
 
 router = Router(name="admin")
@@ -39,6 +40,7 @@ router.message.filter(F.chat.type == "private")
 class ManageFlow(StatesGroup):
     pool_username = State()
     admin_username = State()
+    techlead_username = State()
 
 
 async def _locale_for(session: AsyncSession, user: User, settings: Settings) -> str:
@@ -123,6 +125,12 @@ async def on_manage_action(
             texts.t(locale, "manage_pool_remove_choose_product"),
             reply_markup=keyboards.pool_product_choice(products, locale, mode="remove"),
         )
+    elif callback_data.action == "techlead_set":
+        products = announcements.available_products(settings)
+        await query.message.answer(
+            texts.t(locale, "manage_techlead_choose_product"),
+            reply_markup=keyboards.techlead_product_choice(products, locale),
+        )
     elif callback_data.action == "admin_add":
         await state.set_state(ManageFlow.admin_username)
         await query.message.answer(
@@ -139,18 +147,30 @@ async def on_manage_action(
             texts.t(locale, "btn_manage_admin_remove"),
             reply_markup=keyboards.admin_remove_list(pairs),
         )
+    elif callback_data.action == "techlead_clear":
+        data = await state.get_data()
+        product = data.get("techlead_product")
+        await state.clear()
+        if product is not None:
+            await admin_service.set_techlead(
+                session, product=product, username=None, set_by_user_id=query.from_user.id
+            )
+            await _cancel_prompt(
+                query, locale, text=texts.t(locale, "manage_techlead_cleared", product=product)
+            )
     elif callback_data.action == "cancel":
         await state.clear()
         await _cancel_prompt(query, locale)
     await query.answer()
 
 
-async def _cancel_prompt(query: CallbackQuery, locale: str) -> None:
-    """Retire a pool/admin username prompt once Cancel is tapped on it — same
-    "no-op edits are fine" tolerance as `handlers.announce._strip_buttons`, for the
-    rare double-tap that delivers the same callback twice."""
+async def _cancel_prompt(query: CallbackQuery, locale: str, *, text: str | None = None) -> None:
+    """Retire a pool/admin/techlead username prompt once Cancel (or, for techlead,
+    the "no required reviewer" button) is tapped on it — same "no-op edits are fine"
+    tolerance as `handlers.announce._strip_buttons`, for the rare double-tap that
+    delivers the same callback twice."""
     try:
-        await query.message.edit_text(texts.t(locale, "manage_cancelled"))
+        await query.message.edit_text(text or texts.t(locale, "manage_cancelled"))
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc):
             raise
@@ -188,6 +208,30 @@ async def on_pool_product_choice(
             texts.t(locale, "btn_manage_pool_remove"),
             reply_markup=keyboards.pool_remove_list(members, product or ""),
         )
+    await query.answer()
+
+
+@router.callback_query(TechleadProductChoice.filter())
+async def on_techlead_product_choice(
+    query: CallbackQuery,
+    callback_data: TechleadProductChoice,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    """Which product's required reviewer `techlead_set` acts on, picked right after
+    the panel button — before the username prompt."""
+    locale = await _locale_for(session, query.from_user, settings)
+    if not await admin_service.is_admin(session, settings, query.from_user.id):
+        await query.answer(texts.t(locale, "manage_no_access"), show_alert=True)
+        return
+
+    await state.update_data(techlead_product=callback_data.product)
+    await state.set_state(ManageFlow.techlead_username)
+    await query.message.answer(
+        texts.t(locale, "manage_ask_techlead_username"),
+        reply_markup=keyboards.manage_techlead_prompt(locale),
+    )
     await query.answer()
 
 
@@ -269,6 +313,38 @@ async def on_admin_username(
     )
     key = "manage_admin_added" if added else "manage_admin_already"
     await message.answer(texts.t(locale, key, username=username))
+
+
+@router.message(
+    ManageFlow.techlead_username,
+    F.text,
+    ~F.text.startswith("/"),
+    ~F.text.in_(keyboards.ALL_MENU_TEXTS),
+)
+async def on_techlead_username(
+    message: Message, state: FSMContext, session: AsyncSession, settings: Settings
+) -> None:
+    locale = await _locale_for(session, message.from_user, settings)
+    try:
+        username = admin_service.normalize_username(message.text)
+    except admin_service.InvalidUsername:
+        await message.answer(
+            texts.t(locale, "manage_invalid_username"),
+            reply_markup=keyboards.manage_techlead_prompt(locale),
+        )
+        return
+
+    data = await state.get_data()
+    product = data.get("techlead_product")
+    await state.clear()
+    if product is None:
+        return
+    await admin_service.set_techlead(
+        session, product=product, username=username, set_by_user_id=message.from_user.id
+    )
+    await message.answer(
+        texts.t(locale, "manage_techlead_set", product=product, username=username)
+    )
 
 
 @router.callback_query(RemovePoolMember.filter())

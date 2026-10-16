@@ -198,7 +198,8 @@ REVIEW_PROJECTS={"example/demo-project":{"product":"Demo Product","techlead":"us
 
 - `product` — se muestra en la publicación generada.
 - `techlead` *(opcional)* — se incluye siempre, salvo que sea quien está ejecutando
-  `/announce`.
+  `/announce`. Se puede anular por producto desde `/manage`, sin tocar `.env` — ver
+  [Gestión desde el bot](#gestión-desde-el-bot).
 - `reviewer_count` *(opcional, por defecto 2)* — total de revisores en la publicación,
   el techlead incluido.
 
@@ -448,18 +449,19 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 
 ## Gestión desde el bot
 
-Hay dos cosas editables directamente en Telegram, sin redeploy: **quién tiene acceso
-de administrador** y **el grupo de revisores de cada producto** del que se nutre
-`/announce`.
+Hay tres cosas editables directamente en Telegram, sin redeploy: **quién tiene acceso
+de administrador**, **el grupo de revisores de cada producto** y **el revisor
+obligatorio de cada producto** — todo lo que usa `/announce`.
 
 - **`/admins`** — visible para todos, lista quién tiene acceso de administrador ahora
   mismo (la misma separación "ver sí, tocar no" que `/products`).
-- **`/manage`** — solo para administradores, abre un panel con cuatro acciones:
-  añadir/quitar a alguien del grupo de revisores, añadir/quitar a un administrador. Se
-  vuelve a comprobar en cada pulsación de botón, no solo al abrir el panel, por si
-  alguien llega hasta ahí reenviando un callback antiguo o escribiendo a mano el texto
-  de un botón. Cada mensaje trae un botón **Cancelar** — salir a mitad de camino ya
-  no significa escribir algo solo para que falle la validación.
+- **`/manage`** — solo para administradores, abre un panel con cinco acciones:
+  añadir/quitar a alguien del grupo de revisores, cambiar el revisor obligatorio de un
+  producto, añadir/quitar a un administrador. Se vuelve a comprobar en cada pulsación
+  de botón, no solo al abrir el panel, por si alguien llega hasta ahí reenviando un
+  callback antiguo o escribiendo a mano el texto de un botón. Cada mensaje trae un
+  botón **Cancelar** — salir a mitad de camino ya no significa escribir algo solo para
+  que falle la validación.
 
 Añadir al grupo pregunta primero a qué producto — un botón por cada producto
 configurado, más **🌐 todos los productos** para añadir a alguien en todos a la vez.
@@ -474,8 +476,18 @@ persona haya hecho `/start` nunca. Añadir un *administrador* sí lo requiere (e
 se identifica por su id numérico de Telegram, no por el usuario), así que `/manage`
 pide que el destinatario haga `/start` primero si todavía no lo ha hecho.
 
-Ambas listas arrancan sembradas desde `ADMIN_USER_IDS` en `.env` — una lista de ids
-numéricos separados por comas, que solo se consulta mientras la tabla de
+Cambiar el revisor obligatorio funciona igual, solo que sin la opción "todos los
+productos" — un revisor obligatorio siempre es de un único producto, así que es un
+toque en el producto y luego un `@usuario` (o **🚫 Sin revisor obligatorio** para
+quitarlo del todo — un producto puede legítimamente no tener uno). El override
+reemplaza por completo el valor `techlead` de `REVIEW_PROJECTS`, incluso para la
+comprobación de "¿estos proyectos eligen revisores de la misma forma?" que corre
+`/announce` cuando un borrador nombra MRs de varios repositorios: dos repositorios que
+no coinciden en `.env` pero comparten el mismo override de `/manage` sí coinciden en
+la práctica, y viceversa.
+
+La lista de administradores arranca sembrada desde `ADMIN_USER_IDS` en `.env` — una
+lista de ids numéricos separados por comas, que solo se consulta mientras la tabla de
 administradores siga vacía. En el momento en que se añade el primer administrador
 desde el bot, esa lista del `.env` deja de importar por completo; existe solo como
 respaldo de arranque/recuperación (el primer despliegue, o el caso poco probable de
@@ -518,7 +530,7 @@ activo en él, así que no se puede duplicar a nadie ni nombrarse a uno mismo po
 | `/products` | lista los productos configurados, su revisor obligatorio y el grupo de cada uno |
 | `/myposts` | reasigna un revisor en tus publicaciones ya publicadas — ver [Reasignar un revisor](#reasignar-un-revisor) |
 | `/admins` | quién tiene acceso de administrador ahora mismo — ver [Gestión desde el bot](#gestión-desde-el-bot) |
-| `/manage` | añadir/quitar participantes del grupo de revisores y administradores — solo administradores |
+| `/manage` | añadir/quitar participantes del grupo de revisores, cambiar el revisor obligatorio de un producto, añadir/quitar administradores — solo administradores |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
 | `/lang <código>` | cambia el idioma del bot para tus propios mensajes privados |
 | `/mute 2h`, `/unmute` | silenciar / volver a avisar |
@@ -534,7 +546,7 @@ poetry install
 cp .env.example .env                # completa BOT_TOKEN
 poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
 
-poetry run pytest                   # 338 pruebas
+poetry run pytest                   # 351 pruebas
 poetry run ruff check src tests
 ```
 

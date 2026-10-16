@@ -135,3 +135,27 @@ async def add_to_pool(
 async def remove_from_pool(session: AsyncSession, *, username: str, product: str | None) -> bool:
     """Removes the exact `(product, username)` row — see `repo.remove_pool_member`."""
     return await repo.remove_pool_member(session, product=product, username=username)
+
+
+async def resolve_techlead(
+    session: AsyncSession, product: str, env_default: str | None
+) -> str | None:
+    """The effective required reviewer for `product` — a `/manage`-set override if
+    one has ever been made for it, falling back to `REVIEW_PROJECTS`'s own value
+    otherwise. The override's mere existence decides this, not its `username`: once
+    a row exists, even `username=None` (explicitly cleared) wins over `env_default`.
+    """
+    override = await repo.get_product_techlead(session, product)
+    if override is not None:
+        return override.username
+    return env_default
+
+
+async def set_techlead(
+    session: AsyncSession, *, product: str, username: str | None, set_by_user_id: int
+) -> None:
+    """`username=None` explicitly clears it — a product can legitimately have no
+    required reviewer, same as `ProjectReviewConfig.techlead` being unset today."""
+    await repo.set_product_techlead(
+        session, product=product, username=username, set_by_user_id=set_by_user_id
+    )
