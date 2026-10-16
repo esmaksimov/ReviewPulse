@@ -308,6 +308,63 @@ async def reopen_review(session: AsyncSession, review: Review) -> bool:
     return True
 
 
+async def replace_reviewer(
+    session: AsyncSession,
+    review: Review,
+    old_assignment: ReviewerAssignment,
+    *,
+    new_username: str,
+    at: datetime | None = None,
+) -> ReviewerAssignment:
+    """Swap one named reviewer for another on an already-published, still-open
+    review — `/myposts`'s "they're on vacation" case, the author acting directly
+    instead of waiting for another post edit.
+
+    The old assignment is marked `removed_at`, never deleted outright — same as
+    `_sync_assignments` dropping a reviewer whose @handle disappeared from an edited
+    post — so a verdict they already gave stays in the transition history even
+    though it stops counting toward quorum (`Review.approvals` only sums rows with
+    `removed_at is None`). The new one starts exactly the way a freshly-named
+    @mention does: `PENDING`, ball on them from now, found the same lazy way
+    (`repo.get_user_by_username`) — there is no immediate "you've been assigned" DM
+    anywhere in this app, including for a brand new post; they hear from the bot the
+    normal way, once the SLA clock `ball_since` starts actually elapses.
+    """
+    moment = at or utcnow()
+    old_assignment.removed_at = moment
+
+    telegram_user_id = None
+    user = await repo.get_user_by_username(session, new_username)
+    if user is not None:
+        telegram_user_id = user.telegram_user_id
+
+    # If this person was already named on this review at some point (and later
+    # dropped by a post edit), `mention_key` already exists — revive that row rather
+    # than insert a second one, which `uq_assignment_per_review` would refuse.
+    mention_key = f"un:{new_username.lower()}"
+    revived = next((row for row in review.assignments if row.mention_key == mention_key), None)
+    if revived is not None:
+        revived.removed_at = None
+        revived.state = ReviewerState.PENDING
+        revived.ball_since = moment
+        revived.decided_at = None
+        revived.telegram_user_id = telegram_user_id or revived.telegram_user_id
+        await session.flush()
+        return revived
+
+    new_assignment = ReviewerAssignment(
+        mention_key=mention_key,
+        username=new_username,
+        telegram_user_id=telegram_user_id,
+        display_label=f"@{new_username}",
+        state=ReviewerState.PENDING,
+        ball_since=moment,
+    )
+    review.assignments.append(new_assignment)
+    await session.flush()
+    return new_assignment
+
+
 async def link_author_to_reviews(
     session: AsyncSession, telegram_user_id: int, username: str
 ) -> int:

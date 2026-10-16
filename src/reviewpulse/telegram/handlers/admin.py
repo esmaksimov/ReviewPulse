@@ -1,4 +1,4 @@
-"""Bot admins and the shared reviewer pool, managed from inside Telegram.
+"""Bot admins and each product's reviewer pool, managed from inside Telegram.
 
 Two access levels, not one: `/admins` just lists who currently has extra control —
 visible to everyone, the same way `/products` shows the reviewer setup without
@@ -10,6 +10,7 @@ still type the button's label by hand" caution `commands.on_stats` already appli
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -20,11 +21,13 @@ from ...config import Settings
 from ...db import repo
 from ...i18n import resolve_locale
 from ...services import admin as admin_service
+from ...services import announcements
 from .. import keyboards, texts
 from ..keyboards import (
     MENU_ADMINS_TEXTS,
     MENU_MANAGE_TEXTS,
     ManageAction,
+    PoolProductChoice,
     RemoveAdmin,
     RemovePoolMember,
 )
@@ -109,20 +112,23 @@ async def on_manage_action(
         return
 
     if callback_data.action == "pool_add":
-        await state.set_state(ManageFlow.pool_username)
-        await query.message.answer(texts.t(locale, "manage_ask_pool_username"))
-    elif callback_data.action == "pool_remove":
-        pool = await admin_service.pool_usernames(session)
-        if not pool:
-            await query.answer(texts.t(locale, "manage_pool_empty"), show_alert=True)
-            return
+        products = announcements.available_products(settings)
         await query.message.answer(
-            texts.t(locale, "btn_manage_pool_remove"),
-            reply_markup=keyboards.pool_remove_list(pool),
+            texts.t(locale, "manage_pool_add_choose_product"),
+            reply_markup=keyboards.pool_product_choice(products, locale, mode="add"),
+        )
+    elif callback_data.action == "pool_remove":
+        products = announcements.available_products(settings)
+        await query.message.answer(
+            texts.t(locale, "manage_pool_remove_choose_product"),
+            reply_markup=keyboards.pool_product_choice(products, locale, mode="remove"),
         )
     elif callback_data.action == "admin_add":
         await state.set_state(ManageFlow.admin_username)
-        await query.message.answer(texts.t(locale, "manage_ask_admin_username"))
+        await query.message.answer(
+            texts.t(locale, "manage_ask_admin_username"),
+            reply_markup=keyboards.manage_username_prompt(locale),
+        )
     elif callback_data.action == "admin_remove":
         admins = await repo.list_admins(session)
         if not admins:
@@ -132,6 +138,55 @@ async def on_manage_action(
         await query.message.answer(
             texts.t(locale, "btn_manage_admin_remove"),
             reply_markup=keyboards.admin_remove_list(pairs),
+        )
+    elif callback_data.action == "cancel":
+        await state.clear()
+        await _cancel_prompt(query, locale)
+    await query.answer()
+
+
+async def _cancel_prompt(query: CallbackQuery, locale: str) -> None:
+    """Retire a pool/admin username prompt once Cancel is tapped on it — same
+    "no-op edits are fine" tolerance as `handlers.announce._strip_buttons`, for the
+    rare double-tap that delivers the same callback twice."""
+    try:
+        await query.message.edit_text(texts.t(locale, "manage_cancelled"))
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
+
+
+@router.callback_query(PoolProductChoice.filter())
+async def on_pool_product_choice(
+    query: CallbackQuery,
+    callback_data: PoolProductChoice,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    """Which pool `pool_add`/`pool_remove` acts on, picked right after the panel
+    button — before the username prompt (add) or the member list (remove)."""
+    locale = await _locale_for(session, query.from_user, settings)
+    if not await admin_service.is_admin(session, settings, query.from_user.id):
+        await query.answer(texts.t(locale, "manage_no_access"), show_alert=True)
+        return
+
+    product = callback_data.product or None
+    if callback_data.mode == "add":
+        await state.update_data(pool_product=product)
+        await state.set_state(ManageFlow.pool_username)
+        await query.message.answer(
+            texts.t(locale, "manage_ask_pool_username"),
+            reply_markup=keyboards.manage_username_prompt(locale),
+        )
+    elif callback_data.mode == "remove":
+        members = await admin_service.pool_members_for_display(session, product)
+        if not members:
+            await query.answer(texts.t(locale, "manage_pool_empty"), show_alert=True)
+            return
+        await query.message.answer(
+            texts.t(locale, "btn_manage_pool_remove"),
+            reply_markup=keyboards.pool_remove_list(members, product or ""),
         )
     await query.answer()
 
@@ -149,12 +204,17 @@ async def on_pool_username(
     try:
         username = admin_service.normalize_username(message.text)
     except admin_service.InvalidUsername:
-        await message.answer(texts.t(locale, "manage_invalid_username"))
+        await message.answer(
+            texts.t(locale, "manage_invalid_username"),
+            reply_markup=keyboards.manage_username_prompt(locale),
+        )
         return
 
+    data = await state.get_data()
+    product = data.get("pool_product")
     await state.clear()
     added = await admin_service.add_to_pool(
-        session, username=username, added_by_user_id=message.from_user.id
+        session, username=username, product=product, added_by_user_id=message.from_user.id
     )
     key = "manage_pool_added" if added else "manage_pool_already"
     await message.answer(texts.t(locale, key, username=username))
@@ -173,7 +233,10 @@ async def on_admin_username(
     try:
         username = admin_service.normalize_username(message.text)
     except admin_service.InvalidUsername:
-        await message.answer(texts.t(locale, "manage_invalid_username"))
+        await message.answer(
+            texts.t(locale, "manage_invalid_username"),
+            reply_markup=keyboards.manage_username_prompt(locale),
+        )
         return
 
     target = await repo.get_user_by_username(session, username)
@@ -182,7 +245,10 @@ async def on_admin_username(
         # `services.reviews._sync_assignments`), `BotAdmin.telegram_user_id` is
         # required: `is_admin` checks the *pressing* user's numeric id, so there is
         # no admin row to create at all until this person is a known `User`.
-        await message.answer(texts.t(locale, "manage_admin_unknown_user", username=username))
+        await message.answer(
+            texts.t(locale, "manage_admin_unknown_user", username=username),
+            reply_markup=keyboards.manage_username_prompt(locale),
+        )
         return
 
     await state.clear()
@@ -213,7 +279,9 @@ async def on_remove_pool_member(
     if not await admin_service.is_admin(session, settings, query.from_user.id):
         await query.answer(texts.t(locale, "manage_no_access"), show_alert=True)
         return
-    await admin_service.remove_from_pool(session, callback_data.username)
+    await admin_service.remove_from_pool(
+        session, username=callback_data.username, product=callback_data.product or None
+    )
     await query.answer(
         texts.t(locale, "manage_pool_removed", username=callback_data.username)
     )

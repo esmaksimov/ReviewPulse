@@ -12,12 +12,13 @@ def _labels(markup: ReplyKeyboardMarkup) -> list[str]:
     return [button.text for row in markup.keyboard for button in row]
 
 
-def test_main_menu_always_has_status_announce_products_and_admins() -> None:
+def test_main_menu_always_has_status_announce_products_myposts_and_admins() -> None:
     markup = keyboards.main_menu("en", show_stats=False, show_manage=False)
     assert _labels(markup) == [
         texts.t("en", "btn_menu_status"),
         texts.t("en", "btn_menu_announce"),
         texts.t("en", "btn_menu_products"),
+        texts.t("en", "btn_menu_myposts"),
         texts.t("en", "btn_menu_admins"),
     ]
 
@@ -30,6 +31,7 @@ def test_main_menu_adds_stats_only_when_authorized() -> None:
         texts.t("ru", "btn_menu_status"),
         texts.t("ru", "btn_menu_announce"),
         texts.t("ru", "btn_menu_products"),
+        texts.t("ru", "btn_menu_myposts"),
         texts.t("ru", "btn_menu_admins"),
         texts.t("ru", "btn_menu_stats"),
     ]
@@ -41,6 +43,7 @@ def test_main_menu_adds_manage_only_for_admins() -> None:
         texts.t("ru", "btn_menu_status"),
         texts.t("ru", "btn_menu_announce"),
         texts.t("ru", "btn_menu_products"),
+        texts.t("ru", "btn_menu_myposts"),
         texts.t("ru", "btn_menu_admins"),
         texts.t("ru", "btn_menu_manage"),
     ]
@@ -52,6 +55,7 @@ def test_main_menu_can_show_both_stats_and_manage() -> None:
         texts.t("ru", "btn_menu_status"),
         texts.t("ru", "btn_menu_announce"),
         texts.t("ru", "btn_menu_products"),
+        texts.t("ru", "btn_menu_myposts"),
         texts.t("ru", "btn_menu_admins"),
         texts.t("ru", "btn_menu_stats"),
         texts.t("ru", "btn_menu_manage"),
@@ -101,6 +105,7 @@ def test_menu_text_sets_cover_every_supported_locale() -> None:
     for key, text_set in (
         ("btn_menu_status", keyboards.MENU_STATUS_TEXTS),
         ("btn_menu_announce", keyboards.MENU_ANNOUNCE_TEXTS),
+        ("btn_menu_myposts", keyboards.MENU_MYPOSTS_TEXTS),
         ("btn_menu_stats", keyboards.MENU_STATS_TEXTS),
     ):
         assert text_set == {texts.t(loc, key) for loc in SUPPORTED_LOCALES}

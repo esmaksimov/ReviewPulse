@@ -246,6 +246,31 @@ async def unlinked_authored_reviews_for_username(
     return list(result.scalars().all())
 
 
+async def open_reviews_authored_by(session: AsyncSession, username: str) -> list[Review]:
+    """Open reviews with this "Автор:" handle, regardless of whether the author's id
+    has resolved yet — `/myposts`'s listing. Unlike
+    `unlinked_authored_reviews_for_username` (only the *not yet* resolved ones, for
+    the /start backfill), this wants every open review this person authored."""
+    result = await session.execute(
+        select(Review)
+        .where(Review.author_username.ilike(username), Review.is_closed.is_(False))
+        .options(selectinload(Review.assignments))
+        .order_by(Review.posted_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_assignment_by_id(
+    session: AsyncSession, assignment_id: int
+) -> ReviewerAssignment | None:
+    result = await session.execute(
+        select(ReviewerAssignment)
+        .where(ReviewerAssignment.id == assignment_id)
+        .options(selectinload(ReviewerAssignment.review).selectinload(Review.assignments))
+    )
+    return result.scalar_one_or_none()
+
+
 async def find_assignment(
     session: AsyncSession, review_id: int, telegram_user_id: int
 ) -> ReviewerAssignment | None:
@@ -393,34 +418,72 @@ async def remove_admin(session: AsyncSession, telegram_user_id: int) -> bool:
 # --- reviewer pool --------------------------------------------------------------
 
 
-async def list_pool_members(session: AsyncSession) -> list[ReviewerPoolMember]:
+async def pool_members_for_product(session: AsyncSession, product: str) -> list[ReviewerPoolMember]:
+    """The *effective* pool for `product`: its own rows plus every global one
+    (`product IS NULL`) — what `/announce` actually draws from."""
     result = await session.execute(
-        select(ReviewerPoolMember).order_by(ReviewerPoolMember.created_at)
+        select(ReviewerPoolMember)
+        .where(or_(ReviewerPoolMember.product == product, ReviewerPoolMember.product.is_(None)))
+        .order_by(ReviewerPoolMember.created_at)
     )
     return list(result.scalars().all())
 
 
-async def get_pool_member(session: AsyncSession, username: str) -> ReviewerPoolMember | None:
+async def global_pool_members(session: AsyncSession) -> list[ReviewerPoolMember]:
+    """Only the members added for every product at once, not a specific product's
+    own — the "🌐 all products" scope in the `/manage` remove flow."""
     result = await session.execute(
-        select(ReviewerPoolMember).where(ReviewerPoolMember.username.ilike(username))
+        select(ReviewerPoolMember)
+        .where(ReviewerPoolMember.product.is_(None))
+        .order_by(ReviewerPoolMember.created_at)
     )
+    return list(result.scalars().all())
+
+
+async def get_pool_member(
+    session: AsyncSession, product: str | None, username: str
+) -> ReviewerPoolMember | None:
+    """Case-insensitive. `product=None` looks for an existing *global* row only
+    (adding someone for every product); a specific product also matches a global
+    row, since that already covers it (adding to just that one product)."""
+    conditions = [ReviewerPoolMember.username.ilike(username)]
+    if product is None:
+        conditions.append(ReviewerPoolMember.product.is_(None))
+    else:
+        conditions.append(
+            or_(ReviewerPoolMember.product == product, ReviewerPoolMember.product.is_(None))
+        )
+    result = await session.execute(select(ReviewerPoolMember).where(*conditions))
     return result.scalars().first()
 
 
 async def add_pool_member(
-    session: AsyncSession, *, username: str, added_by_user_id: int
+    session: AsyncSession, *, username: str, product: str | None, added_by_user_id: int
 ) -> ReviewerPoolMember | None:
-    """`None` if already in the pool (case-insensitively) — a no-op, not an error."""
-    if await get_pool_member(session, username) is not None:
+    """`None` if already (effectively) in `product`'s pool — a no-op, not an error.
+    `product=None` adds them for every product at once."""
+    if await get_pool_member(session, product, username) is not None:
         return None
-    member = ReviewerPoolMember(username=username, added_by_user_id=added_by_user_id)
+    member = ReviewerPoolMember(
+        username=username, product=product, added_by_user_id=added_by_user_id
+    )
     session.add(member)
     await session.flush()
     return member
 
 
-async def remove_pool_member(session: AsyncSession, username: str) -> bool:
-    member = await get_pool_member(session, username)
+async def remove_pool_member(
+    session: AsyncSession, *, product: str | None, username: str
+) -> bool:
+    """Removes the exact `(product, username)` row — a global row only ever goes
+    through `product=None`, never implicitly by way of a product-specific removal."""
+    conditions = [ReviewerPoolMember.username.ilike(username)]
+    if product is None:
+        conditions.append(ReviewerPoolMember.product.is_(None))
+    else:
+        conditions.append(ReviewerPoolMember.product == product)
+    result = await session.execute(select(ReviewerPoolMember).where(*conditions))
+    member = result.scalars().first()
     if member is None:
         return False
     await session.delete(member)

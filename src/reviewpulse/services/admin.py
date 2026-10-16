@@ -96,17 +96,42 @@ async def remove_admin(session: AsyncSession, telegram_user_id: int) -> bool:
     return await repo.remove_admin(session, telegram_user_id)
 
 
-async def pool_usernames(session: AsyncSession) -> list[str]:
-    return [member.username for member in await repo.list_pool_members(session)]
+async def pool_usernames(session: AsyncSession, product: str) -> list[str]:
+    """The effective draw list for `product` — its own members plus every global
+    one. Deduplicated: a username with both a global and a product-specific row
+    (redundant, but allowed — see `ReviewerPoolMember`) must not be drawn twice."""
+    seen: list[str] = []
+    for member in await repo.pool_members_for_product(session, product):
+        if member.username not in seen:
+            seen.append(member.username)
+    return seen
 
 
-async def add_to_pool(session: AsyncSession, *, username: str, added_by_user_id: int) -> bool:
-    """`False` if already in the pool (case-insensitively)."""
+async def pool_members_for_display(
+    session: AsyncSession, product: str | None
+) -> list[tuple[str, bool]]:
+    """`(username, is_global)` pairs for the `/manage` remove list — `product=None`
+    means the "🌐 all products" scope (global members only); a specific product
+    shows everyone effectively in its pool, global members flagged so removing one
+    there is understood to remove them everywhere, not just from this product."""
+    if product is None:
+        members = await repo.global_pool_members(session)
+    else:
+        members = await repo.pool_members_for_product(session, product)
+    return [(member.username, member.product is None) for member in members]
+
+
+async def add_to_pool(
+    session: AsyncSession, *, username: str, product: str | None, added_by_user_id: int
+) -> bool:
+    """`False` if already (effectively) in `product`'s pool. `product=None` adds
+    them for every product at once."""
     member = await repo.add_pool_member(
-        session, username=username, added_by_user_id=added_by_user_id
+        session, username=username, product=product, added_by_user_id=added_by_user_id
     )
     return member is not None
 
 
-async def remove_from_pool(session: AsyncSession, username: str) -> bool:
-    return await repo.remove_pool_member(session, username)
+async def remove_from_pool(session: AsyncSession, *, username: str, product: str | None) -> bool:
+    """Removes the exact `(product, username)` row — see `repo.remove_pool_member`."""
+    return await repo.remove_pool_member(session, product=product, username=username)

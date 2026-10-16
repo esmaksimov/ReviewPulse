@@ -16,13 +16,24 @@ from reviewpulse.db import repo
 from reviewpulse.services import admin as admin_service
 from reviewpulse.telegram import texts
 from reviewpulse.telegram.handlers import admin, build_router
-from reviewpulse.telegram.keyboards import ManageAction, RemoveAdmin, RemovePoolMember
+from reviewpulse.telegram.keyboards import (
+    ManageAction,
+    PoolProductChoice,
+    RemoveAdmin,
+    RemovePoolMember,
+)
 
 CHAT_ID = 555
 ADMIN_ID = 1
 OTHER_ID = 2
 
-SETTINGS = Settings(_env_file=None, BOT_TOKEN="t", DEFAULT_LOCALE="ru", ADMIN_USER_IDS=[ADMIN_ID])
+SETTINGS = Settings(
+    _env_file=None,
+    BOT_TOKEN="t",
+    DEFAULT_LOCALE="ru",
+    ADMIN_USER_IDS=[ADMIN_ID],
+    REVIEW_PROJECTS={"demo/project": {"product": "Demo", "techlead": "lead"}},
+)
 
 ADMIN_USER = SimpleNamespace(id=ADMIN_ID, username="admin", full_name="Admin", language_code="ru")
 OTHER_USER = SimpleNamespace(id=OTHER_ID, username="other", full_name="Other", language_code="ru")
@@ -50,6 +61,9 @@ class FakeMessage:
     async def answer(self, text, reply_markup=None, **kwargs):
         self._chat.sent.append(SimpleNamespace(text=text, markup=reply_markup))
         return FakeMessage(self._chat, user=self.from_user)
+
+    async def edit_text(self, text, **kwargs):
+        self._chat.sent.append(SimpleNamespace(text=text, markup=None))
 
 
 class FakeQuery:
@@ -113,25 +127,61 @@ async def test_manage_action_is_re_checked_even_if_a_non_admin_reaches_it(sessio
 # --- adding to the pool ----------------------------------------------------------
 
 
-async def test_pool_add_flow_adds_a_new_username(session) -> None:
+async def _start_pool_add(chat: Chat, state: FSMContext, session, *, product: str = "") -> None:
+    """Drives the two steps before the username prompt: open the panel action, then
+    pick a product ("" = 🌐 all products)."""
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
+    )
+    await admin.on_pool_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        PoolProductChoice(mode="add", product=product),
+        state,
+        session,
+        SETTINGS,
+    )
+
+
+async def test_pool_add_flow_asks_which_product_first(session) -> None:
     chat, state = Chat(), new_state()
-    query = FakeQuery(FakeMessage(chat))
-    await admin.on_manage_action(query, ManageAction(action="pool_add"), state, session, SETTINGS)
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_pool_add_choose_product")
+    assert await state.get_state() is None, "not yet waiting on a username"
+
+
+async def test_pool_add_flow_adds_a_new_username_to_every_product(session) -> None:
+    chat, state = Chat(), new_state()
+    await _start_pool_add(chat, state, session, product="")
     assert chat.last_text() == texts.t("ru", "manage_ask_pool_username")
 
     await admin.on_pool_username(FakeMessage(chat, text="@newbie"), state, session, SETTINGS)
 
     assert chat.last_text() == texts.t("ru", "manage_pool_added", username="newbie")
-    assert await admin_service.pool_usernames(session) == ["newbie"]
+    assert await admin_service.pool_usernames(session, "Demo") == ["newbie"]
+    assert await admin_service.pool_usernames(session, "Other") == ["newbie"]
     assert await state.get_state() is None
 
 
-async def test_pool_add_reports_when_already_present(session) -> None:
-    await admin_service.add_to_pool(session, username="newbie", added_by_user_id=ADMIN_ID)
+async def test_pool_add_flow_adds_a_new_username_to_just_one_product(session) -> None:
     chat, state = Chat(), new_state()
-    await admin.on_manage_action(
-        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
+    await _start_pool_add(chat, state, session, product="Demo")
+
+    await admin.on_pool_username(FakeMessage(chat, text="@newbie"), state, session, SETTINGS)
+
+    assert await admin_service.pool_usernames(session, "Demo") == ["newbie"]
+    assert await admin_service.pool_usernames(session, "Other") == [], (
+        "a product-specific add must not leak into a different product's pool"
     )
+
+
+async def test_pool_add_reports_when_already_present(session) -> None:
+    await admin_service.add_to_pool(
+        session, username="newbie", product=None, added_by_user_id=ADMIN_ID
+    )
+    chat, state = Chat(), new_state()
+    await _start_pool_add(chat, state, session, product="")
     await admin.on_pool_username(FakeMessage(chat, text="newbie"), state, session, SETTINGS)
     assert chat.last_text() == texts.t("ru", "manage_pool_already", username="newbie")
 
@@ -140,39 +190,109 @@ async def test_pool_add_reprompts_on_an_invalid_username_without_losing_the_stat
     session,
 ) -> None:
     chat, state = Chat(), new_state()
-    await admin.on_manage_action(
-        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
-    )
+    await _start_pool_add(chat, state, session, product="")
     await admin.on_pool_username(FakeMessage(chat, text="no"), state, session, SETTINGS)
     assert chat.last_text() == texts.t("ru", "manage_invalid_username")
     assert (await state.get_state()) == admin.ManageFlow.pool_username.state
 
 
-async def test_pool_remove_offers_nothing_when_the_pool_is_empty(session) -> None:
+async def test_pool_add_prompt_carries_a_cancel_button(session) -> None:
+    """Regression: until now, neither the pool nor the admin username prompt had any
+    way out short of typing something that happened to fail validation."""
     chat, state = Chat(), new_state()
-    query = FakeQuery(FakeMessage(chat))
+    await _start_pool_add(chat, state, session, product="")
+    assert chat.last_markup() is not None
+
+
+async def test_cancel_button_clears_the_pool_add_flow(session) -> None:
+    chat, state = Chat(), new_state()
+    await _start_pool_add(chat, state, session, product="")
     await admin.on_manage_action(
-        query, ManageAction(action="pool_remove"), state, session, SETTINGS
+        FakeQuery(FakeMessage(chat)), ManageAction(action="cancel"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_cancelled")
+    assert await state.get_state() is None
+
+
+async def test_cancel_button_clears_the_admin_add_flow(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="admin_add"), state, session, SETTINGS
+    )
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="cancel"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_cancelled")
+    assert await state.get_state() is None
+
+
+async def test_pool_remove_flow_asks_which_product_first(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_remove"), state, session, SETTINGS
+    )
+    assert chat.last_text() == texts.t("ru", "manage_pool_remove_choose_product")
+
+
+async def test_pool_remove_offers_nothing_when_that_products_pool_is_empty(session) -> None:
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_remove"), state, session, SETTINGS
+    )
+    query = FakeQuery(FakeMessage(chat))
+    await admin.on_pool_product_choice(
+        query, PoolProductChoice(mode="remove", product=""), state, session, SETTINGS
     )
     assert query.answers == [texts.t("ru", "manage_pool_empty")]
 
 
+async def test_pool_remove_list_marks_a_global_member_distinctly(session) -> None:
+    """Removing a 🌐-marked entry removes that person from every product's pool, not
+    just the one currently being managed — the label is there so that's not a
+    surprise."""
+    await admin_service.add_to_pool(
+        session, username="alice", product=None, added_by_user_id=ADMIN_ID
+    )
+    chat, state = Chat(), new_state()
+    await admin.on_manage_action(
+        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_remove"), state, session, SETTINGS
+    )
+    await admin.on_pool_product_choice(
+        FakeQuery(FakeMessage(chat)),
+        PoolProductChoice(mode="remove", product="Demo"),
+        state,
+        session,
+        SETTINGS,
+    )
+    buttons = [
+        button.text for row in chat.last_markup().inline_keyboard for button in row
+    ]
+    assert any("🌐" in text for text in buttons)
+
+
 async def test_pool_remove_button_removes_the_tapped_member(session) -> None:
-    await admin_service.add_to_pool(session, username="alice", added_by_user_id=ADMIN_ID)
+    await admin_service.add_to_pool(
+        session, username="alice", product=None, added_by_user_id=ADMIN_ID
+    )
     chat = Chat()
     await admin.on_remove_pool_member(
-        FakeQuery(FakeMessage(chat)), RemovePoolMember(username="alice"), session, SETTINGS
+        FakeQuery(FakeMessage(chat)),
+        RemovePoolMember(username="alice", product=""),
+        session,
+        SETTINGS,
     )
-    assert await admin_service.pool_usernames(session) == []
+    assert await admin_service.pool_usernames(session, "Demo") == []
 
 
 async def test_pool_remove_button_is_refused_for_a_non_admin(session) -> None:
-    await admin_service.add_to_pool(session, username="alice", added_by_user_id=ADMIN_ID)
+    await admin_service.add_to_pool(
+        session, username="alice", product=None, added_by_user_id=ADMIN_ID
+    )
     query = FakeQuery(FakeMessage(Chat(), user=OTHER_USER), user=OTHER_USER)
     await admin.on_remove_pool_member(
-        query, RemovePoolMember(username="alice"), session, SETTINGS
+        query, RemovePoolMember(username="alice", product=""), session, SETTINGS
     )
-    assert await admin_service.pool_usernames(session) == ["alice"], "untouched"
+    assert await admin_service.pool_usernames(session, "Demo") == ["alice"], "untouched"
 
 
 # --- adding/removing admins ------------------------------------------------------
@@ -273,9 +393,7 @@ async def test_tapping_the_announce_button_while_mid_pool_add_switches_to_announ
     routers, which calling a handler by hand can never exercise."""
     router = build_router()
     chat, state = Chat(), new_state()
-    await admin.on_manage_action(
-        FakeQuery(FakeMessage(chat)), ManageAction(action="pool_add"), state, session, SETTINGS
-    )
+    await _start_pool_add(chat, state, session, product="")
     assert chat.last_text() == texts.t("ru", "manage_ask_pool_username")
 
     announce_button = FakeMessage(chat, text=texts.t("ru", "btn_menu_announce"))

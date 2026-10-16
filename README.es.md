@@ -208,11 +208,11 @@ su propia entrada, así que un repositorio nuevo funciona con `/announce` de inm
 sin tener que añadirlo antes a mano. Una entrada exacta siempre gana sobre un
 comodín, y un comodín más específico (más largo) siempre gana sobre uno más general.
 
-Las plazas restantes se sortean de **un único grupo compartido de revisores**, no de
-una lista por proyecto — ver [Gestión desde el bot](#gestión-desde-el-bot) más abajo.
-Toca **📦 Productos** en el menú del bot (o envía `/products`) para ver la
-configuración de `REVIEW_PROJECTS` sin abrir el `.env` — por cada producto, su
-revisor obligatorio.
+Las plazas restantes se sortean del **grupo de revisores de ese producto** — ver
+[Gestión desde el bot](#gestión-desde-el-bot) más abajo. Toca **📦 Productos** en el
+menú del bot (o envía `/products`) para ver la configuración de `REVIEW_PROJECTS` sin
+abrir el `.env` — por cada producto, su revisor obligatorio y quién está en su grupo
+ahora mismo.
 
 La línea de autor se resuelve gratis aquí — a diferencia de una publicación escrita a
 mano, la identidad de quien redacta ya se conoce por el mensaje privado, sin
@@ -449,7 +449,7 @@ olvidado en otro rompe el CI en vez de caer en silencio al inglés en producció
 ## Gestión desde el bot
 
 Hay dos cosas editables directamente en Telegram, sin redeploy: **quién tiene acceso
-de administrador** y **el grupo compartido de revisores** del que se nutre
+de administrador** y **el grupo de revisores de cada producto** del que se nutre
 `/announce`.
 
 - **`/admins`** — visible para todos, lista quién tiene acceso de administrador ahora
@@ -458,13 +458,21 @@ de administrador** y **el grupo compartido de revisores** del que se nutre
   añadir/quitar a alguien del grupo de revisores, añadir/quitar a un administrador. Se
   vuelve a comprobar en cada pulsación de botón, no solo al abrir el panel, por si
   alguien llega hasta ahí reenviando un callback antiguo o escribiendo a mano el texto
-  de un botón.
+  de un botón. Cada mensaje trae un botón **Cancelar** — salir a mitad de camino ya
+  no significa escribir algo solo para que falle la validación.
 
-Añadir al grupo de revisores solo necesita un `@usuario` — igual que una mención
-manual de revisor, se resuelve de forma perezosa y no requiere que esa persona haya
-hecho `/start` nunca. Añadir un *administrador* sí lo requiere (el acceso se identifica
-por su id numérico de Telegram, no por el usuario), así que `/manage` pide que el
-destinatario haga `/start` primero si todavía no lo ha hecho.
+Añadir al grupo pregunta primero a qué producto — un botón por cada producto
+configurado, más **🌐 todos los productos** para añadir a alguien en todos a la vez.
+Elegir un producto no toca los demás: alguien añadido solo al grupo de "Pagos" nunca
+aparece en el sorteo de "Catálogo". Un miembro global ("todos los productos") y uno
+específico de un producto pueden coexistir — es redundante, nunca un conflicto — y
+quitar uno nunca quita el otro implícitamente; la lista para quitar marca una entrada
+global para que quede claro que quitarla ahí lo saca de todos los productos, no solo
+del que se está gestionando. En cualquier caso solo necesita un `@usuario` — igual que
+una mención manual de revisor, se resuelve de forma perezosa y no requiere que esa
+persona haya hecho `/start` nunca. Añadir un *administrador* sí lo requiere (el acceso
+se identifica por su id numérico de Telegram, no por el usuario), así que `/manage`
+pide que el destinatario haga `/start` primero si todavía no lo ha hecho.
 
 Ambas listas arrancan sembradas desde `ADMIN_USER_IDS` en `.env` — una lista de ids
 numéricos separados por comas, que solo se consulta mientras la tabla de
@@ -476,6 +484,30 @@ siempre activa por debajo de la base de datos.
 
 ---
 
+## Reasignar un revisor
+
+Cuando un revisor nombrado se va de vacaciones, o simplemente resulta no ser la
+persona indicada, antes había que editar el post del canal a mano y confiar en que el
+bot lo volviera a analizar bien. **`/myposts`** — disponible para cualquiera, sin ser
+administrador — lista tus propios posts abiertos (encontrados por la línea "Автор:"
+que llevan, el mismo campo al que ya van los DM sobre cambios solicitados) y te deja
+cambiar cualquier revisor actualmente nombrado por otra persona del grupo de ese
+producto, directamente desde el bot.
+
+Toca un post para ver sus revisores actuales, toca **🔁** junto al que se va, y elegí
+su reemplazo. La asignación anterior se da de baja igual que cuando una edición del
+post hace desaparecer a un revisor — su veredicto, si lo había, deja de contar para el
+quórum, pero queda en el historial — y la nueva arranca igual que un revisor recién
+nombrado: pendiente, con el reloj del SLA corriendo desde ese momento. La tarjeta en el
+hilo de discusión se actualiza al instante; el texto del post original del canal queda
+intacto, como siempre — solo se reescriben el estado interno y la tarjeta.
+
+Solo quedan afuera las revisiones cerradas — una vez cerrada no queda nada que
+reasignar. La lista de reemplazo excluye al autor del post y a quien ya sea revisor
+activo en él, así que no se puede duplicar a nadie ni nombrarse a uno mismo por error.
+
+---
+
 ## Comandos del bot
 
 | Comando | Qué hace |
@@ -483,7 +515,8 @@ siempre activa por debajo de la base de datos.
 | `/start` | te registra; vincula tu @usuario a tu id y busca revisiones pendientes en ti |
 | `/status` | qué tienes pendiente ahora mismo, con plazos y un enlace a cada publicación |
 | `/announce` | redacta la publicación del canal por ti — ver [Generar la publicación por ti](#generar-la-publicación-por-ti) |
-| `/products` | lista los productos configurados y su revisor obligatorio |
+| `/products` | lista los productos configurados, su revisor obligatorio y el grupo de cada uno |
+| `/myposts` | reasigna un revisor en tus publicaciones ya publicadas — ver [Reasignar un revisor](#reasignar-un-revisor) |
 | `/admins` | quién tiene acceso de administrador ahora mismo — ver [Gestión desde el bot](#gestión-desde-el-bot) |
 | `/manage` | añadir/quitar participantes del grupo de revisores y administradores — solo administradores |
 | `/link <usuario>` | vincula tu cuenta de GitLab (para el Modo B) |
@@ -501,7 +534,7 @@ poetry install
 cp .env.example .env                # completa BOT_TOKEN
 poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
 
-poetry run pytest                   # 308 pruebas
+poetry run pytest                   # 338 pruebas
 poetry run ruff check src tests
 ```
 
@@ -563,11 +596,17 @@ migrations/                Alembic
   tarjeta es la fuente de verdad.
 - **Cerrar una revisión borra su publicación del canal** (quórum alcanzado, o el botón
   "🗄 Cerrar") — no de inmediato, sino `CHANNEL_CLEANUP_DELAY_HOURS` después (4 por
-  defecto), para que siga visible un rato tras cerrarse. El hilo de discusión, con la
-  tarjeta y todos los comentarios, queda intacto; solo se limpia el listado del canal.
-  Requiere que el bot tenga el permiso de administrador **Eliminar mensajes**; sin él,
-  el cierre ocurre igual, pero la
-  publicación se queda.
+  defecto), para que siga visible un rato tras cerrarse. Los archivos adjuntos al
+  post se eliminan de la misma forma. El hilo de discusión, con la tarjeta y todos
+  los comentarios, queda intacto; solo se limpia el listado del canal. Requiere que
+  el bot tenga el permiso de administrador **Eliminar mensajes**; sin él, el borrado
+  se reintenta en cada ciclo siguiente. La Bot API de Telegram directamente se niega
+  a borrar cualquier mensaje de más de 48 horas, para cualquier bot — una revisión
+  que tarda mucho en cerrarse puede superar ese límite antes incluso de que se
+  cumpla el retraso de limpieza, y ningún reintento lo soluciona. El bot reconoce
+  justo ese caso, deja de reintentar, y avisa una vez por DM a los administradores
+  para que alguien pueda borrar la publicación a mano (el límite de 48 horas es solo
+  de la Bot API; una cuenta real no tiene esa restricción).
 - **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
   como un día laboral normal.
 - **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por
@@ -585,3 +624,7 @@ migrations/                Alembic
 - **Las estadísticas solo cubren transiciones registradas desde que se lanzó la
   función** — no hay forma de rellenar hacia atrás revisiones que se cerraron antes
   de que existiera esa tabla de historial.
+- **`/myposts` solo encuentra posts con tu nombre en la línea "Автор:"** — se
+  compara por tu nombre de usuario de Telegram, así que se pierde un post escrito en
+  tu nombre sin esa línea; y solo puede cambiar a un revisor ya nombrado por otro, no
+  añadir uno más allá del total original ni quitar uno sin reemplazo.

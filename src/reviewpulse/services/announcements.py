@@ -254,7 +254,7 @@ async def create_draft(
         if conflicting:
             raise ConflictingProjectConfigs(base_project, conflicting)
 
-    pool = await admin_service.pool_usernames(session)
+    pool = await admin_service.pool_usernames(session, base_config.product)
     techlead, picks = pick_reviewers(base_config, pool, composer_username=composer_username)
 
     return await repo.create_draft(
@@ -288,7 +288,7 @@ async def reroll(
     config = resolve_config(settings, draft.project_path)
     if config is None:
         raise ProjectNotConfigured(draft.project_path)
-    pool = await admin_service.pool_usernames(session)
+    pool = await admin_service.pool_usernames(session, config.product)
     _, picks = pick_reviewers(config, pool, composer_username=draft.composer_username)
     await repo.set_draft_pool_picks(session, draft, picks)
     return draft

@@ -96,19 +96,58 @@ async def test_list_admins_for_display_uses_the_db_once_populated(session) -> No
     assert await admin_service.list_admins_for_display(session, settings) == [(222, "bob")]
 
 
-# --- the shared reviewer pool ---------------------------------------------------
+# --- the per-product reviewer pool -----------------------------------------------
 
 
 async def test_add_to_pool_is_idempotent_case_insensitively(session) -> None:
-    first = await admin_service.add_to_pool(session, username="Alice", added_by_user_id=1)
-    second = await admin_service.add_to_pool(session, username="alice", added_by_user_id=1)
+    first = await admin_service.add_to_pool(
+        session, username="Alice", product="Demo", added_by_user_id=1
+    )
+    second = await admin_service.add_to_pool(
+        session, username="alice", product="Demo", added_by_user_id=1
+    )
     assert first is True
     assert second is False
-    assert await admin_service.pool_usernames(session) == ["Alice"]
+    assert await admin_service.pool_usernames(session, "Demo") == ["Alice"]
 
 
 async def test_remove_from_pool_reports_whether_anything_was_removed(session) -> None:
-    await admin_service.add_to_pool(session, username="alice", added_by_user_id=1)
-    assert await admin_service.remove_from_pool(session, "alice") is True
-    assert await admin_service.remove_from_pool(session, "alice") is False
-    assert await admin_service.pool_usernames(session) == []
+    await admin_service.add_to_pool(
+        session, username="alice", product="Demo", added_by_user_id=1
+    )
+    assert await admin_service.remove_from_pool(session, username="alice", product="Demo") is True
+    assert (
+        await admin_service.remove_from_pool(session, username="alice", product="Demo") is False
+    )
+    assert await admin_service.pool_usernames(session, "Demo") == []
+
+
+async def test_a_global_member_is_in_every_products_effective_pool(session) -> None:
+    await admin_service.add_to_pool(session, username="alice", product=None, added_by_user_id=1)
+    assert await admin_service.pool_usernames(session, "Demo") == ["alice"]
+    assert await admin_service.pool_usernames(session, "Other") == ["alice"]
+
+
+async def test_a_product_specific_member_does_not_leak_into_other_products(session) -> None:
+    await admin_service.add_to_pool(session, username="bob", product="Demo", added_by_user_id=1)
+    assert await admin_service.pool_usernames(session, "Demo") == ["bob"]
+    assert await admin_service.pool_usernames(session, "Other") == []
+
+
+async def test_adding_someone_already_global_to_a_specific_product_is_a_no_op(session) -> None:
+    """They already cover that product via the global row — a redundant
+    product-specific row on top would just need deduplicating later for nothing."""
+    await admin_service.add_to_pool(session, username="alice", product=None, added_by_user_id=1)
+    added = await admin_service.add_to_pool(
+        session, username="alice", product="Demo", added_by_user_id=1
+    )
+    assert added is False
+
+
+async def test_removing_from_one_product_does_not_touch_a_global_membership(session) -> None:
+    await admin_service.add_to_pool(session, username="alice", product=None, added_by_user_id=1)
+    removed = await admin_service.remove_from_pool(session, username="alice", product="Demo")
+    assert removed is False, "there was never a Demo-specific row to remove"
+    assert await admin_service.pool_usernames(session, "Demo") == ["alice"], (
+        "the global row is untouched"
+    )

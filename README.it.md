@@ -212,11 +212,11 @@ propria, così un repo appena creato funziona subito con `/announce` senza dover
 prima aggiungere a mano. Una voce esatta vince sempre su un wildcard, e un wildcard
 più specifico (più lungo) vince sempre su uno più generico.
 
-I posti restanti vengono estratti da **un unico pool condiviso di revisori**, non da
-un elenco per progetto — vedi [Gestione dal bot](#gestione-dal-bot) più sotto. Tocca
-**📦 Prodotti** nel menu del bot (o invia `/products`) per vedere la configurazione di
-`REVIEW_PROJECTS` senza aprire `.env` — per ogni prodotto, il suo revisore
-obbligatorio.
+I posti restanti vengono estratti dal **pool di revisori di quel prodotto** — vedi
+[Gestione dal bot](#gestione-dal-bot) più sotto. Tocca **📦 Prodotti** nel menu del
+bot (o invia `/products`) per vedere la configurazione di `REVIEW_PROJECTS` senza
+aprire `.env` — per ogni prodotto, il suo revisore obbligatorio e chi c'è nel suo
+pool adesso.
 
 La riga dell'autore qui si risolve gratis — a differenza di un post scritto a mano,
 l'identità di chi lo compone è già nota dal messaggio privato, senza bisogno di
@@ -456,7 +456,7 @@ silenzio sull'inglese in produzione.
 ## Gestione dal bot
 
 Due cose si modificano direttamente da Telegram, senza redeploy: **chi ha accesso da
-amministratore** e **il pool condiviso di revisori** da cui pesca `/announce`.
+amministratore** e **il pool di revisori di ogni prodotto** da cui pesca `/announce`.
 
 - **`/admins`** — visibile a tutti, elenca chi ha accesso da amministratore in questo
   momento (la stessa separazione "guardare sì, modificare no" di `/products`).
@@ -464,13 +464,23 @@ amministratore** e **il pool condiviso di revisori** da cui pesca `/announce`.
   aggiungere/rimuovere un membro del pool di revisori, aggiungere/rimuovere un
   amministratore. Viene ricontrollato a ogni pressione di pulsante, non solo
   all'apertura del pannello, nel caso qualcuno ci arrivi riproponendo un vecchio
-  callback o scrivendo a mano il testo di un pulsante.
+  callback o scrivendo a mano il testo di un pulsante. Ogni richiesta ha un pulsante
+  **Annulla** — uscire a metà flusso non significa più dover digitare qualcosa solo
+  per farlo fallire alla validazione.
 
-Aggiungere al pool richiede solo uno `@username` — come una menzione manuale di un
-revisore, viene risolto in modo pigro e non richiede che quella persona abbia mai
-fatto `/start`. Aggiungere un *amministratore* invece sì (l'accesso è identificato
-dall'id numerico Telegram, non dallo username), quindi `/manage` chiede prima alla
-persona di fare `/start` se il bot non la conosce ancora.
+Aggiungere al pool chiede prima per quale prodotto — un pulsante per ogni prodotto
+configurato, più **🌐 tutti i prodotti** per aggiungere qualcuno ovunque in una volta.
+Scegliere un prodotto non tocca gli altri: chi viene aggiunto solo al pool di
+"Pagamenti" non comparirà mai nell'estrazione per "Catalogo". Un membro globale
+("tutti i prodotti") e uno specifico di un prodotto possono coesistere — è ridondante,
+mai un conflitto — e rimuoverne uno non rimuove mai implicitamente l'altro; l'elenco
+per la rimozione segnala una voce globale, così è chiaro che rimuoverla da lì toglie
+quella persona da tutti i prodotti, non solo da quello che si sta gestendo. In ogni
+caso basta uno `@username` — come una menzione manuale di un revisore, viene risolto
+in modo pigro e non richiede che quella persona abbia mai fatto `/start`. Aggiungere
+un *amministratore* invece sì (l'accesso è identificato dall'id numerico Telegram,
+non dallo username), quindi `/manage` chiede prima alla persona di fare `/start` se
+il bot non la conosce ancora.
 
 Entrambi gli elenchi partono popolati da `ADMIN_USER_IDS` in `.env` — una lista di id
 numerici separati da virgola, consultata solo finché la tabella degli amministratori
@@ -482,6 +492,32 @@ database.
 
 ---
 
+## Riassegnare un revisore
+
+Quando un revisore nominato va in ferie, o semplicemente si rivela la persona
+sbagliata, prima bisognava modificare a mano il post nel canale e sperare che il bot
+lo rianalizzasse correttamente. **`/myposts`** — aperto a chiunque, nessun
+amministratore richiesto — elenca i tuoi post aperti (trovati tramite la riga
+"Автор:" che portano, lo stesso campo a cui vanno già i DM sulle modifiche
+richieste) e permette di sostituire qualsiasi revisore attualmente nominato con
+qualcun altro dal pool di quel prodotto, direttamente dal bot.
+
+Tocca un post per vedere i suoi revisori attuali, tocca **🔁** accanto a chi se ne va,
+poi scegli il sostituto. L'assegnazione precedente viene ritirata nello stesso modo
+in cui una modifica del post che fa sparire un revisore funziona già — il suo
+verdetto, se c'era, smette di contare per il quorum, ma resta nello storico — e quella
+nuova parte esattamente come un revisore appena nominato: in attesa, con il timer
+dello SLA che parte da quel momento. La card nel thread di discussione si aggiorna
+subito; il testo del post originale nel canale resta intatto, come sempre — vengono
+riscritti solo lo stato tracciato e la card.
+
+Restano fuori solo le review chiuse — una volta chiusa una review non c'è più nulla
+da riassegnare. L'elenco dei sostituti esclude l'autore del post e chiunque sia già
+revisore attivo su di esso, quindi non è possibile duplicare nessuno né nominare se
+stessi per errore.
+
+---
+
 ## Comandi del bot
 
 | Comando | Cosa fa |
@@ -489,7 +525,8 @@ database.
 | `/start` | ti registra; collega il tuo @username al tuo id e trova le review in sospeso su di te |
 | `/status` | cosa è in sospeso su di te adesso, con le scadenze e un link a ogni post |
 | `/announce` | compone il post del canale al posto tuo — vedi [Generare il post per te](#generare-il-post-per-te) |
-| `/products` | elenca i prodotti configurati e il loro revisore obbligatorio |
+| `/products` | elenca i prodotti configurati, il loro revisore obbligatorio e il pool di ciascuno |
+| `/myposts` | riassegna un revisore sui tuoi post già pubblicati — vedi [Riassegnare un revisore](#riassegnare-un-revisore) |
 | `/admins` | chi ha accesso da amministratore in questo momento — vedi [Gestione dal bot](#gestione-dal-bot) |
 | `/manage` | aggiungere/rimuovere membri del pool di revisori e amministratori — solo amministratori |
 | `/link <username>` | collega il tuo account GitLab (per la Modalità B) |
@@ -507,7 +544,7 @@ poetry install
 cp .env.example .env                # compila BOT_TOKEN
 poetry run python -m reviewpulse    # le migrazioni si applicano da sole all'avvio
 
-poetry run pytest                   # 308 test
+poetry run pytest                   # 338 test
 poetry run ruff check src tests
 ```
 
@@ -570,10 +607,18 @@ migrations/                Alembic
   fonte di verità.
 - **Chiudere una review elimina il suo post dal canale** (quorum raggiunto, o il
   pulsante "🗄 Chiudi") — non subito, ma `CHANNEL_CLEANUP_DELAY_HOURS` dopo (4 di
-  default), così resta visibile ancora un po' dopo la chiusura. Il thread di
-  discussione, card e commenti compresi, resta intatto; viene ripulito solo l'elenco
-  del canale. Richiede che il bot abbia il permesso admin **Elimina messaggi**; senza,
-  la chiusura avviene comunque, il post resta soltanto lì.
+  default), così resta visibile ancora un po' dopo la chiusura. Anche i file
+  allegati al post vengono rimossi allo stesso modo. Il thread di discussione, card e
+  commenti compresi, resta intatto; viene ripulito solo l'elenco del canale. Richiede
+  che il bot abbia il permesso admin **Elimina messaggi**; senza, l'eliminazione viene
+  ritentata a ogni ciclo successivo. La Bot API di Telegram si rifiuta categoricamente
+  di eliminare qualsiasi messaggio più vecchio di 48 ore, per qualunque bot — una
+  review che impiega un tempo insolitamente lungo a chiudersi può superare quella
+  soglia ancora prima che scatti il ritardo di pulizia, e nessun ritentativo lo
+  risolve. Il bot riconosce proprio questo caso, smette di ritentare e avvisa una
+  volta via DM gli amministratori, così qualcuno può eliminare il post a mano (il
+  limite delle 48 ore riguarda solo la Bot API; un account reale non ha questa
+  restrizione).
 - **I giorni festivi non sono gestiti** — il bot tratterà una festività nazionale
   come un normale giorno lavorativo.
 - **L'analisi dei post riconosce un insieme fisso di parole-etichetta** per campo
@@ -592,3 +637,8 @@ migrations/                Alembic
 - **Le statistiche coprono solo le transizioni registrate da quando è stata
   lanciata la funzione** — non c'è modo di recuperare le review chiuse prima che
   esistesse quella tabella di cronologia.
+- **`/myposts` trova solo i post con il tuo nome sulla riga "Автор:"** —
+  l'abbinamento avviene per username Telegram, quindi si perde un post scritto per
+  tuo conto senza quella riga; e può solo sostituire un revisore già nominato con un
+  altro, non aggiungerne uno oltre il conteggio originale né rimuoverlo senza
+  sostituto.

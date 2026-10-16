@@ -43,17 +43,51 @@ class AnnounceProduct(CallbackData, prefix="ap"):
 
 
 class ManageAction(CallbackData, prefix="mg"):
-    """One of the four entry points on the admin-only management panel."""
+    """One of the four entry points on the admin-only management panel, plus
+    `cancel` — reused on the username-capture prompts those first two open into
+    (see `manage_username_prompt`), the same way `AnnounceStep`'s `cancel` covers
+    every step of that composer rather than needing one callback class per step."""
 
-    action: str  # pool_add | pool_remove | admin_add | admin_remove
+    action: str  # pool_add | pool_remove | admin_add | admin_remove | cancel
+
+
+class PoolProductChoice(CallbackData, prefix="ppc"):
+    """Which product's pool `pool_add`/`pool_remove` acts on — asked right after
+    picking that panel button, before the username prompt (add) or the member list
+    (remove). Empty string means every product at once."""
+
+    mode: str  # add | remove
+    product: str
 
 
 class RemovePoolMember(CallbackData, prefix="rpm"):
     username: str
+    #: Empty string stands in for the global scope (`product=None` in the DB) —
+    #: `CallbackData` fields are packed as strings, so `None` itself can't round-trip.
+    product: str
 
 
 class RemoveAdmin(CallbackData, prefix="rad"):
     telegram_user_id: int
+
+
+class MyPostSelect(CallbackData, prefix="mps"):
+    """Open one of your own open reviews from the `/myposts` listing."""
+
+    review_id: int
+
+
+class MyPostReplaceStart(CallbackData, prefix="mprs"):
+    """Pick which currently-named reviewer to replace."""
+
+    assignment_id: int
+
+
+class MyPostReplaceWith(CallbackData, prefix="mprw"):
+    """Pick who replaces them, from the review's product pool."""
+
+    assignment_id: int
+    username: str
 
 
 def review_card(
@@ -120,6 +154,7 @@ def announce_preview(
 MENU_STATUS_TEXTS = frozenset(texts.t(loc, "btn_menu_status") for loc in SUPPORTED_LOCALES)
 MENU_ANNOUNCE_TEXTS = frozenset(texts.t(loc, "btn_menu_announce") for loc in SUPPORTED_LOCALES)
 MENU_PRODUCTS_TEXTS = frozenset(texts.t(loc, "btn_menu_products") for loc in SUPPORTED_LOCALES)
+MENU_MYPOSTS_TEXTS = frozenset(texts.t(loc, "btn_menu_myposts") for loc in SUPPORTED_LOCALES)
 MENU_STATS_TEXTS = frozenset(texts.t(loc, "btn_menu_stats") for loc in SUPPORTED_LOCALES)
 MENU_ADMINS_TEXTS = frozenset(texts.t(loc, "btn_menu_admins") for loc in SUPPORTED_LOCALES)
 MENU_MANAGE_TEXTS = frozenset(texts.t(loc, "btn_menu_manage") for loc in SUPPORTED_LOCALES)
@@ -133,6 +168,7 @@ ALL_MENU_TEXTS = (
     MENU_STATUS_TEXTS
     | MENU_ANNOUNCE_TEXTS
     | MENU_PRODUCTS_TEXTS
+    | MENU_MYPOSTS_TEXTS
     | MENU_STATS_TEXTS
     | MENU_ADMINS_TEXTS
     | MENU_MANAGE_TEXTS
@@ -140,20 +176,21 @@ ALL_MENU_TEXTS = (
 
 
 def main_menu(locale: str, *, show_stats: bool, show_manage: bool) -> ReplyKeyboardMarkup:
-    """The persistent bottom keyboard - Status/Announce/Products/Admins always, Stats
-    and Management only for whoever is actually authorized for them (mirrors the
-    access checks `on_stats`/the admin panel make anyway)."""
+    """The persistent bottom keyboard - Status/Announce/Products/My posts/Admins
+    always, Stats and Management only for whoever is actually authorized for them
+    (mirrors the access checks `on_stats`/the admin panel make anyway)."""
     builder = ReplyKeyboardBuilder()
     builder.button(text=texts.t(locale, "btn_menu_status"))
     builder.button(text=texts.t(locale, "btn_menu_announce"))
     builder.button(text=texts.t(locale, "btn_menu_products"))
+    builder.button(text=texts.t(locale, "btn_menu_myposts"))
     builder.button(text=texts.t(locale, "btn_menu_admins"))
     if show_stats:
         builder.button(text=texts.t(locale, "btn_menu_stats"))
     if show_manage:
         builder.button(text=texts.t(locale, "btn_menu_manage"))
     extra_row = [int(show_stats) + int(show_manage)] if (show_stats or show_manage) else []
-    builder.adjust(2, 2, *extra_row)
+    builder.adjust(2, 2, 1, *extra_row)
     return builder.as_markup(resize_keyboard=True, is_persistent=True)
 
 
@@ -194,7 +231,7 @@ def announce_products(products: list[str], locale: str) -> InlineKeyboardMarkup:
 
 
 def manage_panel(locale: str) -> InlineKeyboardMarkup:
-    """The admin-only control panel: add/remove on the shared reviewer pool, and on
+    """The admin-only control panel: add/remove on a product's reviewer pool, and on
     the admin list itself."""
     builder = InlineKeyboardBuilder()
     builder.button(
@@ -217,12 +254,52 @@ def manage_panel(locale: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def pool_remove_list(usernames: list[str]) -> InlineKeyboardMarkup:
-    """One button per current pool member — tapping removes that exact person, no
-    free-text typing (and no typos) needed for a removal."""
+def manage_username_prompt(locale: str) -> InlineKeyboardMarkup:
+    """Just a Cancel button under the pool/admin username prompt — those two are the
+    only steps in `/manage` that wait on free-text input, and until now neither had a
+    way out short of typing something that would fail validation."""
     builder = InlineKeyboardBuilder()
-    for username in usernames:
-        builder.button(text=f"@{username}", callback_data=RemovePoolMember(username=username))
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=ManageAction(action="cancel"),
+    )
+    return builder.as_markup()
+
+
+def pool_product_choice(products: list[str], locale: str, *, mode: str) -> InlineKeyboardMarkup:
+    """Which pool `pool_add`/`pool_remove` acts on: "🌐 every product" plus one
+    button per configured product. Same row-math as `announce_products` — one extra
+    item for the "all" button, then Cancel on its own row."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=texts.t(locale, "btn_pool_all_products"),
+        callback_data=PoolProductChoice(mode=mode, product=""),
+    )
+    for product in products:
+        builder.button(text=product, callback_data=PoolProductChoice(mode=mode, product=product))
+    builder.button(
+        text=texts.t(locale, "btn_announce_cancel"),
+        callback_data=ManageAction(action="cancel"),
+    )
+    count = len(products) + 1
+    builder.adjust(*([2] * ((count + 1) // 2)), 1)
+    return builder.as_markup()
+
+
+def pool_remove_list(members: list[tuple[str, bool]], scope_product: str) -> InlineKeyboardMarkup:
+    """One button per pool member effective for the chosen scope — `members` is
+    `(username, is_global)` pairs, a 🌐 marking someone who'd be removed from every
+    product's pool, not just the one currently being managed (`scope_product`, used
+    verbatim as the row to delete for anyone *not* global — it's exactly how
+    `repo.pool_members_for_product` matched them in the first place). Tapping
+    removes that exact person, no free-text typing (and no typos) needed."""
+    builder = InlineKeyboardBuilder()
+    for username, is_global in members:
+        label = f"🌐 @{username}" if is_global else f"@{username}"
+        product = "" if is_global else scope_product
+        builder.button(
+            text=label, callback_data=RemovePoolMember(username=username, product=product)
+        )
     builder.adjust(1)
     return builder.as_markup()
 
@@ -235,6 +312,42 @@ def admin_remove_list(admins: list[tuple[int, str | None]]) -> InlineKeyboardMar
         label = f"@{username}" if username else str(telegram_user_id)
         builder.button(
             text=label, callback_data=RemoveAdmin(telegram_user_id=telegram_user_id)
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def myposts_list(reviews: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    """One button per open review you authored — `reviews` is `(review_id, label)`
+    pairs, the label already a rendered headline (keeping this module free of any
+    dependency on `db.models`, same as every other list builder here)."""
+    builder = InlineKeyboardBuilder()
+    for review_id, label in reviews:
+        builder.button(text=f"⚙️ {label}", callback_data=MyPostSelect(review_id=review_id))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def myposts_reviewer_list(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    """One button per currently-named reviewer on one review — `rows` is
+    `(assignment_id, label)` pairs, tapping one starts replacing that person."""
+    builder = InlineKeyboardBuilder()
+    for assignment_id, label in rows:
+        builder.button(
+            text=f"🔁 {label}", callback_data=MyPostReplaceStart(assignment_id=assignment_id)
+        )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def myposts_candidate_list(assignment_id: int, candidates: list[str]) -> InlineKeyboardMarkup:
+    """Who to replace them with — drawn from the review's product pool, composer
+    and current reviewers already excluded by the caller."""
+    builder = InlineKeyboardBuilder()
+    for username in candidates:
+        builder.button(
+            text=f"@{username}",
+            callback_data=MyPostReplaceWith(assignment_id=assignment_id, username=username),
         )
     builder.adjust(1)
     return builder.as_markup()

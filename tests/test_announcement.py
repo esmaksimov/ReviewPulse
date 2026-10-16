@@ -30,13 +30,16 @@ def make_settings(channel_id: int | None = None, **projects: dict) -> Settings:
     )
 
 
-async def seed_pool(session, *usernames: str) -> None:
+async def seed_pool(session, *usernames: str, product: str | None = None) -> None:
     """The reviewer pool is DB-backed now (see `services.admin`), not a
     `REVIEW_PROJECTS` field — a leftover "pool" key in a test's settings dict is
     harmless but does nothing; this is what actually puts candidates in play for
-    `pick_reviewers`."""
+    `pick_reviewers`. `product=None` (the default) seeds every product's pool at
+    once, matching what most of these tests actually want."""
     for username in usernames:
-        await repo.add_pool_member(session, username=username, added_by_user_id=1)
+        await repo.add_pool_member(
+            session, username=username, product=product, added_by_user_id=1
+        )
 
 
 # --- pick_reviewers (pure) ---------------------------------------------------

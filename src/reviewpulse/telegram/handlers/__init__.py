@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import admin, announce, callbacks, commands, posts
+from . import admin, announce, callbacks, commands, myposts, posts
 
 
 def build_router() -> Router:
@@ -9,6 +9,7 @@ def build_router() -> Router:
     router.include_router(commands.router)
     router.include_router(admin.router)
     router.include_router(announce.router)
+    router.include_router(myposts.router)
     router.include_router(callbacks.router)
     router.include_router(posts.router)
     return router

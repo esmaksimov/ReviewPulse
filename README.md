@@ -203,11 +203,11 @@ works with `/announce` right away instead of needing to be added first. An exact
 entry always wins over a wildcard, and a more specific (longer) wildcard always wins
 over a broader one.
 
-The remaining random slot(s) are drawn from **one shared reviewer pool**, not a
-per-project list — see [Admin management](#admin-management) below for how it's
-maintained. Tap **📦 Products** in the bot's menu (or send `/products`) to see the
-`REVIEW_PROJECTS` setup without opening the `.env` file — one entry per product and
-its required reviewer.
+The remaining random slot(s) are drawn from **that product's reviewer pool** — see
+[Admin management](#admin-management) below for how it's maintained. Tap
+**📦 Products** in the bot's menu (or send `/products`) to see the `REVIEW_PROJECTS`
+setup without opening the `.env` file — one entry per product, its required reviewer,
+and who's currently in its pool.
 
 The author line resolves for free here — unlike a hand-typed post, the composer's
 identity is already known from the DM, with no opt-in tag needed.
@@ -433,25 +433,56 @@ production.
 ## Admin management
 
 Two things are editable from inside Telegram, no redeploy needed: **who has admin
-access**, and **the shared reviewer pool** `/announce` draws from.
+access**, and **each product's reviewer pool** `/announce` draws from.
 
 - **`/admins`** — visible to everyone, lists who currently has admin access (the same
   "look, don't touch" split as `/products`).
 - **`/manage`** — admin-only, opens a panel with four actions: add/remove a reviewer
   pool member, add/remove an admin. Re-checked on every button press, not just on
   opening the panel, in case someone reaches it by replaying an old callback or typing
-  a button's label by hand.
+  a button's label by hand. Every prompt carries a **Cancel** button, so backing out
+  mid-flow never means typing something just to make it fail validation.
 
-Adding to the pool just takes a `@username` — like a hand-typed reviewer mention, it's
-resolved lazily and doesn't require that person to have ever started the bot. Adding
-an *admin* does require it (admin-ness is keyed by their numeric Telegram id, not a
-username), so `/manage` asks the target to `/start` the bot first if they haven't.
+Adding to the pool asks which product's pool first — one tap per configured product,
+plus **🌐 all products** to add someone everywhere at once. Picking a product doesn't
+touch the others: someone added only to "Payments" never shows up drawn for
+"Catalog". A global ("all products") member and a product-specific one can coexist —
+redundant, never a conflict — and removing one never implicitly removes the other; the
+remove list marks a global entry so removing it there is understood to remove that
+person from every product, not just the one being managed. Either way it's just a
+`@username` — like a hand-typed reviewer mention, it's resolved lazily and doesn't
+require that person to have ever started the bot. Adding an *admin* does require it
+(admin-ness is keyed by their numeric Telegram id, not a username), so `/manage` asks
+the target to `/start` the bot first if they haven't.
 
 Both lists start out seeded from `ADMIN_USER_IDS` in `.env` — a comma-separated list
 of numeric ids, consulted only while the admin table is still empty. The moment the
 first admin is added through the bot, that env list stops mattering at all; it exists
 purely as a bootstrap/recovery fallback (first deploy, or the unlikely case where
 every admin has removed themselves), not an always-on allowlist layered underneath.
+
+---
+
+## Reassigning a reviewer
+
+A named reviewer going on vacation, or just turning out to be the wrong pick, used to
+mean editing the channel post by hand and hoping the bot re-parsed it correctly.
+**`/myposts`** — open to everyone, no admin needed — lists your own open posts (matched
+by the "Автор:" name on them, the same field DMs about requested changes already go
+to) and lets you swap out any currently-named reviewer for someone else from that
+product's pool, right from the bot.
+
+Tap a post to see its current reviewers, tap **🔁** next to the one leaving, then pick
+their replacement. The old assignment is dropped the same way an edited post dropping
+a reviewer already works — any verdict they'd given stops counting toward quorum, but
+stays on record — and the new one starts exactly like a freshly-named reviewer would:
+pending, SLA clock running from that moment. The card in the discussion thread updates
+immediately; the original channel post's text stays untouched, same as it's always
+been — only the tracked state and the card are ever rewritten.
+
+Only closed reviews are left out — once a review has closed there's nothing left to
+reassign. The replacement pool excludes the post's author and whoever's already an
+active reviewer on it, so you can't double up or accidentally name yourself.
 
 ---
 
@@ -462,7 +493,8 @@ every admin has removed themselves), not an always-on allowlist layered undernea
 | `/start` | registers you; links your @handle to your id and finds reviews waiting on you |
 | `/status` | what's on you right now, with deadlines and a link to each post |
 | `/announce` | put together the channel post for you — see [Generating the post for you](#generating-the-post-for-you) |
-| `/products` | list configured products and their required reviewer |
+| `/products` | list configured products, their required reviewer, and each one's pool |
+| `/myposts` | reassign a reviewer on your own already-published posts — see [Reassigning a reviewer](#reassigning-a-reviewer) |
 | `/admins` | list who currently has admin access — see [Admin management](#admin-management) |
 | `/manage` | add/remove reviewer pool members and admins — admin-only |
 | `/link <username>` | link your GitLab account (for Mode B) |
@@ -480,7 +512,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 308 tests
+poetry run pytest                   # 338 tests
 poetry run ruff check src tests
 ```
 
@@ -541,10 +573,16 @@ migrations/              Alembic
   source of truth.
 - **Closing a review deletes its post from the channel** (quorum reached, or the
   "🗄 Close" button) — not immediately, but `CHANNEL_CLEANUP_DELAY_HOURS` later
-  (default 4), so it's still visible for a while right after closing. The discussion
-  thread, including the card and every comment, is untouched; only the channel
-  listing gets decluttered. Requires the bot to have the **Delete messages** admin
-  right; without it, the close still happens, the post just stays.
+  (default 4), so it's still visible for a while right after closing. Any files sent
+  alongside it get cleaned up the same way. The discussion thread, including the
+  card and every comment, is untouched; only the channel listing gets decluttered.
+  Requires the bot to have the **Delete messages** admin right; without it, deletion
+  is retried on every later tick. Telegram's Bot API flatly refuses to delete any
+  message older than 48 hours, for any bot — a review that takes unusually long to
+  close can age past that window before the cleanup delay even fires, and no amount
+  of retrying ever changes that. The bot recognizes this specific case, gives up
+  retrying, and DMs admins once so a human can delete the post by hand instead (the
+  48-hour limit is Bot-API-only; a real account has no such restriction).
 - **Public holidays aren't accounted for** — the bot will treat a national holiday as
   a normal working day.
 - **Post parsing recognizes a fixed set of label words** per field (see
@@ -560,3 +598,7 @@ migrations/              Alembic
   over. The finished draft is a DB row and is unaffected.
 - **Stats only cover transitions recorded after the feature shipped** — there's no way
   to backfill reviews that closed before that history table existed.
+- **`/myposts` only finds posts naming you on the "Автор:" line** — matched by your
+  Telegram username, so it misses a post typed on your behalf without that line, and
+  it can only swap a currently-named reviewer for someone else, not add one beyond
+  the original count or remove one outright.

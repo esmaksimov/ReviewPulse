@@ -356,16 +356,26 @@ class BotAdmin(Base, TimestampMixin):
 
 
 class ReviewerPoolMember(Base, TimestampMixin):
-    """One candidate for the non-pinned reviewer slot(s) `/announce` draws from.
+    """One candidate for the non-pinned reviewer slot(s) `/announce` draws from,
+    scoped to one `product` — or every product at once when `product` is `None`,
+    the same "unset means universal" convention `ProjectReviewConfig.techlead` and a
+    `REVIEW_PROJECTS` `/*` wildcard already use elsewhere in this app.
 
-    Shared across every product — see `services.announcements.pick_reviewers` — and
-    editable by a `BotAdmin` through the bot instead of a `REVIEW_PROJECTS` redeploy.
+    A username can have more than one row (global, plus any number of
+    product-specific ones) — `services.admin.pool_usernames` reads the *effective*
+    pool for a product as the union of its own rows and the global ones, so adding
+    someone globally and later also naming them for one product specifically is
+    redundant but harmless, never a conflict. Editable by a `BotAdmin` through the
+    bot instead of a `REVIEW_PROJECTS` redeploy.
     """
 
     __tablename__ = "reviewer_pool_members"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(64), index=True)
+    #: `None` = every product. Matches a `ProjectReviewConfig.product` value, not a
+    #: GitLab project_path — the pool is scoped at that coarser granularity.
+    product: Mapped[str | None] = mapped_column(String(256), index=True)
     added_by_user_id: Mapped[int | None] = mapped_column(BigInteger)
 
 

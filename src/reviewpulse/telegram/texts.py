@@ -159,8 +159,21 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Анонс",
         "btn_menu_products": "📦 Продукты",
         "btn_menu_stats": "📊 Статистика",
+        "btn_menu_myposts": "🗂 Мои посты",
         "btn_menu_admins": "👑 Админы",
         "btn_menu_manage": "⚙️ Управление",
+        "myposts_no_username": (
+            "У тебя не задан Telegram-юзернейм, так что нечего сопоставлять — "
+            "заведи его в настройках Telegram и попробуй снова."
+        ),
+        "myposts_empty": "Открытых постов с тобой как автором не найдено.",
+        "myposts_header": "Твои открытые посты:",
+        "myposts_review_line": "{headline} — {approved}/{needed} 👍",
+        "myposts_manage_header": "«{headline}» — кого заменить?",
+        "myposts_pick_replacement": "Кем заменить {current}?",
+        "myposts_no_candidates": "В пуле этого продукта больше некем заменить.",
+        "myposts_replaced": "✅ Заменено: {old} → @{new}",
+        "myposts_gone": "Этот пост уже недоступен — возможно, уже закрыт.",
         "btn_announce_skip": "⏭ Пропустить",
         "products_header": "<b>Продукты и ревьюверы</b>",
         "products_required_reviewer": "Обязательный ревьювер: {reviewer}",
@@ -179,6 +192,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "Сейчас нет ни одного админа в базе — список берётся из ADMIN_USER_IDS "
             "в конфиге, убрать их можно только через деплой."
         ),
+        "btn_pool_all_products": "🌐 Все продукты",
+        "manage_pool_add_choose_product": "В пул какого продукта добавить?",
+        "manage_pool_remove_choose_product": "Из пула какого продукта убрать?",
         "manage_ask_pool_username": "Пришли @username, кого добавить в пул ревьюверов.",
         "manage_ask_admin_username": "Пришли @username, кого сделать админом.",
         "manage_invalid_username": (
@@ -364,8 +380,21 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Announce",
         "btn_menu_products": "📦 Products",
         "btn_menu_stats": "📊 Stats",
+        "btn_menu_myposts": "🗂 My posts",
         "btn_menu_admins": "👑 Admins",
         "btn_menu_manage": "⚙️ Manage",
+        "myposts_no_username": (
+            "You don't have a Telegram username set, so there's nothing to match "
+            "against — set one in Telegram's settings and try again."
+        ),
+        "myposts_empty": "No open posts found with you as the author.",
+        "myposts_header": "Your open posts:",
+        "myposts_review_line": "{headline} — {approved}/{needed} 👍",
+        "myposts_manage_header": "\"{headline}\" — replace whom?",
+        "myposts_pick_replacement": "Replace {current} with whom?",
+        "myposts_no_candidates": "Nobody left in this product's pool to replace them with.",
+        "myposts_replaced": "✅ Replaced: {old} → @{new}",
+        "myposts_gone": "This post isn't available any more — it may already be closed.",
         "btn_announce_skip": "⏭ Skip",
         "products_header": "<b>Products and reviewers</b>",
         "products_required_reviewer": "Required reviewer: {reviewer}",
@@ -384,6 +413,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "There's no admin in the database right now — the list falls back to "
             "ADMIN_USER_IDS in the config, which can only be changed by redeploying."
         ),
+        "btn_pool_all_products": "🌐 All products",
+        "manage_pool_add_choose_product": "Add to which product's pool?",
+        "manage_pool_remove_choose_product": "Remove from which product's pool?",
         "manage_ask_pool_username": "Send the @username to add to the reviewer pool.",
         "manage_ask_admin_username": "Send the @username to make an admin.",
         "manage_invalid_username": (
@@ -567,8 +599,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Anuncio",
         "btn_menu_products": "📦 Productos",
         "btn_menu_stats": "📊 Estadísticas",
+        "btn_menu_myposts": "🗂 Mis publicaciones",
         "btn_menu_admins": "👑 Administradores",
         "btn_menu_manage": "⚙️ Gestionar",
+        "myposts_no_username": (
+            "No tienes un nombre de usuario de Telegram configurado, así que no hay "
+            "nada que comparar — configúralo en los ajustes de Telegram e inténtalo "
+            "de nuevo."
+        ),
+        "myposts_empty": "No se encontraron publicaciones abiertas con vos como autor.",
+        "myposts_header": "Tus publicaciones abiertas:",
+        "myposts_review_line": "{headline} — {approved}/{needed} 👍",
+        "myposts_manage_header": "«{headline}» — ¿a quién reemplazar?",
+        "myposts_pick_replacement": "¿Por quién reemplazar a {current}?",
+        "myposts_no_candidates": "No queda nadie en el grupo de este producto para reemplazarlo.",
+        "myposts_replaced": "✅ Reemplazado: {old} → @{new}",
+        "myposts_gone": "Esta publicación ya no está disponible — puede que ya esté cerrada.",
         "btn_announce_skip": "⏭ Omitir",
         "products_header": "<b>Productos y revisores</b>",
         "products_required_reviewer": "Revisor obligatorio: {reviewer}",
@@ -588,6 +634,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "recurre a ADMIN_USER_IDS en la configuración, que solo se puede cambiar "
             "volviendo a desplegar."
         ),
+        "btn_pool_all_products": "🌐 Todos los productos",
+        "manage_pool_add_choose_product": "¿A qué grupo de producto añadir?",
+        "manage_pool_remove_choose_product": "¿De qué grupo de producto quitar?",
         "manage_ask_pool_username": "Envía el @usuario para añadir al grupo de revisores.",
         "manage_ask_admin_username": "Envía el @usuario para hacerlo administrador.",
         "manage_invalid_username": (
@@ -777,8 +826,21 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 Annuncio",
         "btn_menu_products": "📦 Prodotti",
         "btn_menu_stats": "📊 Statistiche",
+        "btn_menu_myposts": "🗂 I miei post",
         "btn_menu_admins": "👑 Admin",
         "btn_menu_manage": "⚙️ Gestisci",
+        "myposts_no_username": (
+            "Non hai impostato uno username Telegram, quindi non c'è nulla da "
+            "confrontare — impostalo nelle impostazioni di Telegram e riprova."
+        ),
+        "myposts_empty": "Nessun post aperto trovato con te come autore.",
+        "myposts_header": "I tuoi post aperti:",
+        "myposts_review_line": "{headline} — {approved}/{needed} 👍",
+        "myposts_manage_header": "«{headline}» — chi sostituire?",
+        "myposts_pick_replacement": "Con chi sostituire {current}?",
+        "myposts_no_candidates": "Non resta nessuno nel pool di questo prodotto per sostituirlo.",
+        "myposts_replaced": "✅ Sostituito: {old} → @{new}",
+        "myposts_gone": "Questo post non è più disponibile — potrebbe essere già chiuso.",
         "products_header": "<b>Prodotti e revisori</b>",
         "products_required_reviewer": "Revisore obbligatorio: {reviewer}",
         "products_pool": "Pool per i posti restanti: {pool}",
@@ -796,6 +858,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "Al momento non c'è nessun admin nel database — l'elenco ricade su "
             "ADMIN_USER_IDS nella configurazione, modificabile solo con un redeploy."
         ),
+        "btn_pool_all_products": "🌐 Tutti i prodotti",
+        "manage_pool_add_choose_product": "Aggiungere al pool di quale prodotto?",
+        "manage_pool_remove_choose_product": "Rimuovere dal pool di quale prodotto?",
         "manage_ask_pool_username": "Invia lo @username da aggiungere al pool di revisori.",
         "manage_ask_admin_username": "Invia lo @username da rendere admin.",
         "manage_invalid_username": (
@@ -971,8 +1036,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "btn_menu_announce": "📢 公告",
         "btn_menu_products": "📦 产品",
         "btn_menu_stats": "📊 统计",
+        "btn_menu_myposts": "🗂 我的帖子",
         "btn_menu_admins": "👑 管理员",
         "btn_menu_manage": "⚙️ 管理",
+        "myposts_no_username": (
+            "你还没有设置 Telegram 用户名，无法匹配——请先在 Telegram 设置里设置一个，然后重试。"
+        ),
+        "myposts_empty": "没有找到以你为作者的进行中的帖子。",
+        "myposts_header": "你的进行中的帖子：",
+        "myposts_review_line": "{headline} — {approved}/{needed} 👍",
+        "myposts_manage_header": "「{headline}」——替换谁？",
+        "myposts_pick_replacement": "用谁替换 {current}？",
+        "myposts_no_candidates": "该产品的候选池里已经没有人可以替换了。",
+        "myposts_replaced": "✅ 已替换：{old} → @{new}",
+        "myposts_gone": "这个帖子已不可用——可能已经关闭。",
         "products_header": "<b>产品与评审人</b>",
         "products_required_reviewer": "必选评审人：{reviewer}",
         "products_pool": "其余名额的候选池：{pool}",
@@ -990,6 +1067,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "数据库里现在没有任何管理员——列表会退回到配置里的 ADMIN_USER_IDS，"
             "只能通过重新部署修改。"
         ),
+        "btn_pool_all_products": "🌐 所有产品",
+        "manage_pool_add_choose_product": "添加到哪个产品的候选池？",
+        "manage_pool_remove_choose_product": "从哪个产品的候选池移除？",
         "manage_ask_pool_username": "发送要加入评审候选池的 @用户名。",
         "manage_ask_admin_username": "发送要设为管理员的 @用户名。",
         "manage_invalid_username": "这看起来不像 Telegram 用户名。请重试，或点击取消。",

@@ -142,8 +142,10 @@ async def on_products(message: Message, session: AsyncSession, settings: Setting
         await message.answer(texts.t(locale, "announce_no_products"), reply_markup=menu)
         return
 
-    pool = await admin_service.pool_usernames(session)
-    products = [(config.product, config.techlead, pool) for config in configs]
+    products = []
+    for config in configs:
+        pool = await admin_service.pool_usernames(session, config.product)
+        products.append((config.product, config.techlead, pool))
     await message.answer(
         texts.products_list(locale, products), reply_markup=menu, disable_web_page_preview=True
     )
