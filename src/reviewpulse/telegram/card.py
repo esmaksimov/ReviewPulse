@@ -39,6 +39,19 @@ def review_url(review: Review) -> str | None:
     return f"https://t.me/c/{internal}/{review.discussion_message_id}"
 
 
+def channel_post_url(review: Review) -> str | None:
+    """Deep link straight to the original channel post — distinct from `review_url`
+    (the discussion thread's card). `scheduler.jobs._notify_admins_of_abandoned_cleanups`
+    needs this one specifically: the thing that actually needs manual deletion is the
+    channel post, not the card, and the two are easy to conflate since the card is
+    what people interact with day to day — pointing at the card there instead would
+    send an admin to the wrong message entirely."""
+    if review.channel_chat_id is None or review.channel_message_id is None:
+        return None
+    internal = str(review.channel_chat_id).removeprefix("-100")
+    return f"https://t.me/c/{internal}/{review.channel_message_id}"
+
+
 def merge_request_pairs(review: Review) -> list[tuple[str, str]]:
     """(label, url) pairs — `project!42` for a GitLab MR, `project#42` for a GitHub
     PR, matching each platform's own convention."""
@@ -170,6 +183,30 @@ async def delete_from_channel(bot: Bot, review: Review) -> ChannelDeleteResult:
         logger.warning("could not delete channel post for review %s: %s", review.id, exc)
         return ChannelDeleteResult.RETRY
     return ChannelDeleteResult.DELETED
+
+
+async def card_exists(bot: Bot, review: Review) -> bool:
+    """Whether the card is still there — someone with delete rights in the
+    discussion group can remove it directly, same as any other message, and the Bot
+    API gives no event when that happens; a no-op markup edit is the only
+    side-effect-free way to check. Used by `scheduler.jobs.channel_cleanup_tick` to
+    notice a review a human has already started cleaning up by hand, so the channel
+    post doesn't sit there orphaned forever just because nobody told the bot.
+
+    `True` for anything short of Telegram confirming the message is actually gone —
+    a transient error reads as "can't tell, assume it's still there", so a hiccup
+    never triggers an unwarranted early deletion.
+    """
+    if review.discussion_chat_id is None or review.card_message_id is None:
+        return True
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=review.discussion_chat_id, message_id=review.card_message_id
+        )
+    except TelegramBadRequest as exc:
+        if "message to edit not found" in str(exc):
+            return False
+    return True
 
 
 async def delete_attachments(bot: Bot, chat_id: int, message_ids: list[int]) -> None:

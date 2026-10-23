@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.methods import DeleteMessage
+from aiogram.methods import DeleteMessage, EditMessageReplyMarkup
 
 from reviewpulse.db.models import MergeRequestLink, Review, ReviewerAssignment
 from reviewpulse.domain.state import ReviewerState
@@ -19,11 +19,14 @@ class FakeBot:
     does — with whatever error text the test needs, e.g. missing rights vs. the post
     already being gone. `fail_for`, if set, narrows that failure to specific message
     ids only, so a test can check that one bad id doesn't stop the rest from being
-    deleted."""
+    deleted. `markup_fail_message` does the same for `edit_message_reply_markup`
+    (`card.card_exists`'s probe), independently of `fail_message`."""
 
     fail_message: str | None = None
     fail_for: set[int] | None = None
     deleted: list[tuple[int, int]] = field(default_factory=list)
+    markup_fail_message: str | None = None
+    markup_edits: list[tuple[int, int]] = field(default_factory=list)
 
     async def delete_message(self, chat_id: int, message_id: int) -> None:
         if self.fail_message is not None and (self.fail_for is None or message_id in self.fail_for):
@@ -32,6 +35,14 @@ class FakeBot:
                 message=self.fail_message,
             )
         self.deleted.append((chat_id, message_id))
+
+    async def edit_message_reply_markup(self, chat_id: int, message_id: int, **kwargs) -> None:
+        if self.markup_fail_message is not None:
+            raise TelegramBadRequest(
+                method=EditMessageReplyMarkup(chat_id=chat_id, message_id=message_id),
+                message=self.markup_fail_message,
+            )
+        self.markup_edits.append((chat_id, message_id))
 
 
 def test_review_url_points_at_the_discussion_thread() -> None:
@@ -51,6 +62,18 @@ def test_review_url_is_none_before_the_discussion_copy_is_linked() -> None:
     until the copy lands, there is nowhere to link to."""
     review = Review(channel_chat_id=-1001111111111, channel_message_id=1)
     assert card.review_url(review) is None
+
+
+def test_channel_post_url_points_at_the_channel_not_the_discussion_thread() -> None:
+    """Distinct from `review_url` — the thing an admin needs to delete by hand once
+    a review is abandoned is the channel post, not the card."""
+    review = Review(
+        channel_chat_id=-1001111111111,
+        channel_message_id=42,
+        discussion_chat_id=-1002222222222,
+        discussion_message_id=456,
+    )
+    assert card.channel_post_url(review) == "https://t.me/c/1111111111/42"
 
 
 def test_headline_falls_back_to_the_localized_default_when_untitled() -> None:
@@ -202,3 +225,28 @@ async def test_delete_attachments_continues_past_one_failure() -> None:
     await card.delete_attachments(bot, -1001111111111, [101, 102, 103])  # must not raise
 
     assert bot.deleted == [(-1001111111111, 101), (-1001111111111, 103)]
+
+
+async def test_card_exists_is_true_when_the_no_op_edit_succeeds_as_a_no_op() -> None:
+    """Telegram reports an identical markup edit as "message is not modified" — the
+    expected response for a card that's still there."""
+    bot = FakeBot(markup_fail_message="message is not modified: ...")
+    review = Review(id=1, discussion_chat_id=-1002222222222, card_message_id=456)
+
+    assert await card.card_exists(bot, review) is True
+
+
+async def test_card_exists_is_false_when_telegram_says_the_message_is_gone() -> None:
+    bot = FakeBot(markup_fail_message="message to edit not found")
+    review = Review(id=1, discussion_chat_id=-1002222222222, card_message_id=456)
+
+    assert await card.card_exists(bot, review) is False
+
+
+async def test_card_exists_is_true_when_the_card_was_never_published() -> None:
+    """Nothing to check yet is not the same as confirmed deleted."""
+    bot = FakeBot(markup_fail_message="message to edit not found")
+    review = Review(id=1)
+
+    assert await card.card_exists(bot, review) is True
+    assert bot.markup_edits == [], "must not even try to probe a card that never existed"

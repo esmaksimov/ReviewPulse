@@ -95,10 +95,17 @@ async def channel_cleanup_tick(bot: Bot, database: Database, settings: Settings)
     for a while. Also how a review closed before this feature ever shipped gets
     caught up: its `closed_at` is already long past the cutoff, so the very first
     tick after deploy sweeps it in along with everything closed since.
+
+    Also catches a review whose card someone has already deleted by hand, regardless
+    of the normal delay — there's nothing left to wait for once that's gone (see
+    `_reviews_with_a_deleted_card`).
     """
     cutoff = utcnow() - settings.channel_cleanup_delay
     async with database.session() as session:
-        reviews = await repo.closed_reviews_pending_channel_cleanup(session, cutoff)
+        due = await repo.closed_reviews_pending_channel_cleanup(session, cutoff)
+        card_gone = await _reviews_with_a_deleted_card(bot, session)
+        reviews = _dedupe_by_id(due, card_gone)
+
         done = 0
         abandoned: list[Review] = []
         for review in reviews:
@@ -127,15 +134,44 @@ async def channel_cleanup_tick(bot: Bot, database: Database, settings: Settings)
         logger.info("channel cleanup removed %s/%s post(s)", done, len(reviews))
 
 
+def _dedupe_by_id(*review_lists: list[Review]) -> list[Review]:
+    seen: dict[int, Review] = {}
+    for reviews in review_lists:
+        for review in reviews:
+            seen.setdefault(review.id, review)
+    return list(seen.values())
+
+
+async def _reviews_with_a_deleted_card(bot: Bot, session: AsyncSession) -> list[Review]:
+    """Closed reviews whose card has already been deleted by hand — most often
+    someone cleaning up a review ahead of (or instead of) the bot's own schedule,
+    without realizing the channel post is a separate message in a separate chat that
+    still needs deleting too. Checked for every candidate every tick since there's no
+    event the Bot API can push when someone else deletes a message — this is the only
+    way to notice.
+    """
+    candidates = await repo.closed_reviews_with_a_card_to_check(session)
+    missing = [review for review in candidates if not await card.card_exists(bot, review)]
+    if missing:
+        logger.info(
+            "found %s review(s) with a manually-deleted card, finishing cleanup early",
+            len(missing),
+        )
+    return missing
+
+
 async def _notify_admins_of_abandoned_cleanups(
     bot: Bot, session: AsyncSession, settings: Settings, reviews: list[Review]
 ) -> None:
     """One-time DM telling admins which posts need deleting by hand — a real human
     in the Telegram app has no 48-hour limit, only the bot does (see
-    `telegram.card.delete_from_channel`)."""
+    `telegram.card.delete_from_channel`). Links straight to the channel post itself
+    (`channel_post_url`), not the discussion thread's card — the post is the thing
+    that actually needs deleting, and the two are easy to conflate since the card is
+    what people interact with day to day."""
     lines = []
     for review in reviews:
-        url = card.review_url(review)
+        url = card.channel_post_url(review)
         headline = card.headline(review, settings.default_locale)
         lines.append(f"• {headline}\n{url}" if url else f"• {headline}")
     body = "\n".join(lines)

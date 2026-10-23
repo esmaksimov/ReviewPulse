@@ -156,6 +156,29 @@ async def closed_reviews_pending_channel_cleanup(
     return list(result.scalars().all())
 
 
+async def closed_reviews_with_a_card_to_check(session: AsyncSession) -> list[Review]:
+    """Closed reviews that still have a channel post to delete, haven't been given
+    up on, and have a card to check — candidates for noticing one a human already
+    deleted by hand ahead of the bot's own schedule (see
+    `scheduler.jobs.channel_cleanup_tick`, `telegram.card.card_exists`).
+
+    Deliberately ignores `closed_at <= cutoff`: once there's no card left to
+    interact with, waiting out the rest of the normal delay serves no purpose.
+    Excludes anything already abandoned (`channel_cleanup_abandoned_at` set) for the
+    opposite reason — that post is already confirmed too old to ever delete, so
+    whether its card is still there changes nothing.
+    """
+    result = await session.execute(
+        select(Review).where(
+            Review.is_closed.is_(True),
+            Review.channel_post_deleted_at.is_(None),
+            Review.channel_cleanup_abandoned_at.is_(None),
+            Review.card_message_id.is_not(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
 # --- assignments ------------------------------------------------------------
 
 

@@ -546,7 +546,7 @@ poetry install
 cp .env.example .env                # completa BOT_TOKEN
 poetry run python -m reviewpulse    # las migraciones se aplican solas al iniciar
 
-poetry run pytest                   # 351 pruebas
+poetry run pytest                   # 358 pruebas
 poetry run ruff check src tests
 ```
 
@@ -609,16 +609,24 @@ migrations/                Alembic
 - **Cerrar una revisión borra su publicación del canal** (quórum alcanzado, o el botón
   "🗄 Cerrar") — no de inmediato, sino `CHANNEL_CLEANUP_DELAY_HOURS` después (4 por
   defecto), para que siga visible un rato tras cerrarse. Los archivos adjuntos al
-  post se eliminan de la misma forma. El hilo de discusión, con la tarjeta y todos
-  los comentarios, queda intacto; solo se limpia el listado del canal. Requiere que
-  el bot tenga el permiso de administrador **Eliminar mensajes**; sin él, el borrado
-  se reintenta en cada ciclo siguiente. La Bot API de Telegram directamente se niega
-  a borrar cualquier mensaje de más de 48 horas, para cualquier bot — una revisión
-  que tarda mucho en cerrarse puede superar ese límite antes incluso de que se
-  cumpla el retraso de limpieza, y ningún reintento lo soluciona. El bot reconoce
-  justo ese caso, deja de reintentar, y avisa una vez por DM a los administradores
-  para que alguien pueda borrar la publicación a mano (el límite de 48 horas es solo
-  de la Bot API; una cuenta real no tiene esa restricción).
+  post se eliminan de la misma forma. El bot solo toca el hilo de discusión, con la
+  tarjeta y todos los comentarios, según su propio calendario — pero es un mensaje
+  normal como cualquier otro, así que cualquiera con permiso para borrar en ese grupo
+  puede eliminarlo a mano antes de eso, igual que cualquier otro mensaje. Si alguien
+  lo hace, el bot lo nota en el siguiente ciclo (la Bot API no avisa cuando otra
+  persona borra un mensaje, así que esto se comprueba en vez de recibirse como aviso)
+  y termina de borrar la publicación del canal enseguida, sin esperar el resto del
+  retraso — ya no queda nada con qué interactuar una vez que la tarjeta desapareció.
+  Requiere que el bot tenga el permiso de administrador **Eliminar mensajes**; sin él,
+  el borrado se reintenta en cada ciclo siguiente. La Bot API de Telegram directamente
+  se niega a borrar cualquier mensaje de más de 48 horas, para cualquier bot — una
+  revisión que tarda mucho en cerrarse puede superar ese límite antes incluso de que
+  se cumpla el retraso de limpieza, y ningún reintento lo soluciona, sin importar qué
+  pase con su tarjeta. El bot reconoce justo ese caso, deja de reintentar, y avisa una
+  vez por DM a los administradores con un enlace directo a la publicación del canal
+  (no a la tarjeta — es fácil confundirlas, pero lo que hay que borrar a mano es la
+  publicación) para que alguien pueda borrarla (el límite de 48 horas es solo de la
+  Bot API; una cuenta real no tiene esa restricción).
 - **Los días festivos no se tienen en cuenta** — el bot tratará un feriado nacional
   como un día laboral normal.
 - **El análisis de publicaciones reconoce un conjunto fijo de palabras clave** por

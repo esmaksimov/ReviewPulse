@@ -365,6 +365,42 @@ async def test_channel_cleanup_skips_a_post_already_abandoned(session) -> None:
     assert await repo.closed_reviews_pending_channel_cleanup(session, cutoff=msk(28, 0, 0)) == []
 
 
+async def test_closed_reviews_with_a_card_to_check_ignores_the_normal_delay(session) -> None:
+    """Unlike `closed_reviews_pending_channel_cleanup`, there's no cutoff here — once
+    a card is confirmed gone (checked by `scheduler.jobs._reviews_with_a_deleted_card`)
+    there's no reason to wait out the rest of the delay."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+    review.card_message_id = 999
+
+    assert await repo.closed_reviews_with_a_card_to_check(session) == [review]
+
+
+async def test_closed_reviews_with_a_card_to_check_requires_a_card(session) -> None:
+    """Nothing to probe for a review the bot never published a card for."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+
+    assert await repo.closed_reviews_with_a_card_to_check(session) == []
+
+
+async def test_closed_reviews_with_a_card_to_check_excludes_abandoned_reviews(session) -> None:
+    """Whether its card is still there changes nothing once a post is confirmed too
+    old to ever delete."""
+    review = await make_review(session, text=POST.replace("Ревью: @user1 @user2", "Ревью: @user1"))
+    await link(session, "user1", 101)
+    assignment = await repo.find_assignment(session, review.id, 101)
+    await review_service.apply_verdict(session, assignment, Event.APPROVE, at=msk(27, 10, 0))
+    review.card_message_id = 999
+    review.channel_cleanup_abandoned_at = msk(27, 12, 0)
+
+    assert await repo.closed_reviews_with_a_card_to_check(session) == []
+
+
 async def test_channel_attachments_round_trip(session) -> None:
     """`services.announcements.publish` records one of these per file sent alongside
     a post; `scheduler.jobs.channel_cleanup_tick` reads them back by the post's own

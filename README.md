@@ -525,7 +525,7 @@ poetry install
 cp .env.example .env                # fill in BOT_TOKEN
 poetry run python -m reviewpulse    # migrations apply themselves on startup
 
-poetry run pytest                   # 351 tests
+poetry run pytest                   # 358 tests
 poetry run ruff check src tests
 ```
 
@@ -588,14 +588,23 @@ migrations/              Alembic
   "🗄 Close" button) — not immediately, but `CHANNEL_CLEANUP_DELAY_HOURS` later
   (default 4), so it's still visible for a while right after closing. Any files sent
   alongside it get cleaned up the same way. The discussion thread, including the
-  card and every comment, is untouched; only the channel listing gets decluttered.
-  Requires the bot to have the **Delete messages** admin right; without it, deletion
-  is retried on every later tick. Telegram's Bot API flatly refuses to delete any
+  card and every comment, is left for the bot to clean up on its own schedule — but
+  it's an ordinary message like any other, so anyone with delete rights in that group
+  can remove it by hand ahead of that, same as they could any message there. If
+  someone does, the bot notices on its next tick (there's no event the Bot API can
+  push for another user's deletion, so this is checked rather than pushed) and
+  finishes deleting the channel post right away rather than waiting out the rest of
+  the delay — there's nothing left to interact with once the card is gone. Requires
+  the bot to have the **Delete messages** admin right; without it, deletion is
+  retried on every later tick. Telegram's Bot API flatly refuses to delete any
   message older than 48 hours, for any bot — a review that takes unusually long to
   close can age past that window before the cleanup delay even fires, and no amount
-  of retrying ever changes that. The bot recognizes this specific case, gives up
-  retrying, and DMs admins once so a human can delete the post by hand instead (the
-  48-hour limit is Bot-API-only; a real account has no such restriction).
+  of retrying ever changes that, regardless of what happens to its card. The bot
+  recognizes this specific case, gives up retrying, and DMs admins once with a link
+  straight to the channel post (not the card — the two are easy to conflate, but the
+  post is the one that actually needs deleting) so a human can delete it by hand
+  instead (the 48-hour limit is Bot-API-only; a real account has no such
+  restriction).
 - **Public holidays aren't accounted for** — the bot will treat a national holiday as
   a normal working day.
 - **Post parsing recognizes a fixed set of label words** per field (see

@@ -556,7 +556,7 @@ poetry install
 cp .env.example .env                # compila BOT_TOKEN
 poetry run python -m reviewpulse    # le migrazioni si applicano da sole all'avvio
 
-poetry run pytest                   # 351 test
+poetry run pytest                   # 358 test
 poetry run ruff check src tests
 ```
 
@@ -620,17 +620,25 @@ migrations/                Alembic
 - **Chiudere una review elimina il suo post dal canale** (quorum raggiunto, o il
   pulsante "🗄 Chiudi") — non subito, ma `CHANNEL_CLEANUP_DELAY_HOURS` dopo (4 di
   default), così resta visibile ancora un po' dopo la chiusura. Anche i file
-  allegati al post vengono rimossi allo stesso modo. Il thread di discussione, card e
-  commenti compresi, resta intatto; viene ripulito solo l'elenco del canale. Richiede
-  che il bot abbia il permesso admin **Elimina messaggi**; senza, l'eliminazione viene
-  ritentata a ogni ciclo successivo. La Bot API di Telegram si rifiuta categoricamente
-  di eliminare qualsiasi messaggio più vecchio di 48 ore, per qualunque bot — una
-  review che impiega un tempo insolitamente lungo a chiudersi può superare quella
-  soglia ancora prima che scatti il ritardo di pulizia, e nessun ritentativo lo
-  risolve. Il bot riconosce proprio questo caso, smette di ritentare e avvisa una
-  volta via DM gli amministratori, così qualcuno può eliminare il post a mano (il
-  limite delle 48 ore riguarda solo la Bot API; un account reale non ha questa
-  restrizione).
+  allegati al post vengono rimossi allo stesso modo. Il bot tocca il thread di
+  discussione, card e commenti compresi, solo secondo i propri tempi — ma è un
+  messaggio normale come un altro, quindi chiunque abbia il permesso di eliminare in
+  quel gruppo può rimuoverlo a mano prima, come qualsiasi altro messaggio lì. Se
+  qualcuno lo fa, il bot se ne accorge al ciclo successivo (la Bot API non invia
+  nessun evento quando un altro utente elimina un messaggio, quindi va controllato
+  invece di essere notificato) e finisce di eliminare subito il post dal canale,
+  senza aspettare il resto del ritardo — non c'è più nulla con cui interagire una
+  volta sparita la card. Richiede che il bot abbia il permesso admin
+  **Elimina messaggi**; senza, l'eliminazione viene ritentata a ogni ciclo
+  successivo. La Bot API di Telegram si rifiuta categoricamente di eliminare
+  qualsiasi messaggio più vecchio di 48 ore, per qualunque bot — una review che
+  impiega un tempo insolitamente lungo a chiudersi può superare quella soglia ancora
+  prima che scatti il ritardo di pulizia, e nessun ritentativo lo risolve,
+  indipendentemente da cosa succeda alla sua card. Il bot riconosce proprio questo
+  caso, smette di ritentare e avvisa una volta via DM gli amministratori con un link
+  diretto al post del canale (non alla card — sono facili da confondere, ma è il post
+  quello da eliminare a mano), così qualcuno può eliminarlo (il limite delle 48 ore
+  riguarda solo la Bot API; un account reale non ha questa restrizione).
 - **I giorni festivi non sono gestiti** — il bot tratterà una festività nazionale
   come un normale giorno lavorativo.
 - **L'analisi dei post riconosce un insieme fisso di parole-etichetta** per campo
